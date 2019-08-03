@@ -1,6 +1,6 @@
 # power-ai 远程训练
-* [搭建ftp](#ftp 服务)
-### ftp 服务
+* [搭建ftp](#ftp-service)
+### ftp-service
 ```powershell
 #!/bin/bash
 sudo docker run -d -v /home/baymin/daily-work/ftp/:/home/vsftpd \
