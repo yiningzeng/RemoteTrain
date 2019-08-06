@@ -1,8 +1,12 @@
 # !/usr/bin/env python
 import pika
 import os
+from retry import retry
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # rabbitmq 文档 https://pika.readthedocs.io/en/stable/modules/channel.html
+# retry https://github.com/invl/retry
+# pika https://pypi.org/project/pika/
 
 if __name__ == '__main__':
     credentials = pika.PlainCredentials('baymin','baymin1024')
@@ -17,7 +21,10 @@ if __name__ == '__main__':
     #               routing_key='train.start.test.fast',
     #               body='{fufuasdaskjdsa: "asdasdasdasds"}')
     # connection.close()
-
+    @retry()
+    def make_trouble():
+        print('\nretry')
+        '''Retry until succeed'''
 
     def backcall(ch, method, properties, body):  # 参数body是发送过来的消息。
         print(ch, method, properties)
@@ -27,10 +34,11 @@ if __name__ == '__main__':
         # 1.开始训练
         # 2.训练结束后生成done.txt 在目录下
         # 答复此条消息已经处理完成，这里要判断，在目录下有没有done.txt，有的话就回复完成
-        ch.basic_ack(method.delivery_tag)
+        # ch.basic_ack(method.delivery_tag)
 
 
     # channel.basic_get(queue='ai.train.topic-queue', auto_ack=False,  callback=backcall)
+
     channel.basic_consume('ai.train.topic-queue', backcall)
         # backcall,  # 回调函数。执行结束后立即执行另外一个函数返回给发送端是否执行完毕。
         #                   queue=,
