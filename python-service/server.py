@@ -40,9 +40,24 @@ class pikaqiu(object):
         self.train_queue = train_queue
         self.train_routing_key = train_routing_key
         # endregion
+        # region 训练素材包队列参数
+        self.package_exchange = package_exchange
+        self.package_queue = package_queue
+        self.package_routing_key = package_routing_key
+        # endregion
+        self.parameters = pika.URLParameters("amqp://%s:%s@%s:%d" % (username, password, host, port))
 
         # self.consume()
 
+    @retry(pika.exceptions.AMQPConnectionError, delay=5, jitter=(1, 3))
+    def consume(self, channel, on_message_callback=None):
+        log.info('consume:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        channel.basic_consume(self.package_queue, on_message_callback)
+        try:
+            channel.start_consuming()
+        # Don't recover connections closed by server
+        except pika.exceptions.ConnectionClosedByBroker:
+            pass
 
     def get_one(self, channel):
         log.info('get:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
@@ -71,12 +86,23 @@ class pikaqiu(object):
             channel.queue_declare(self.train_queue, passive=True, durable=True)
             channel.queue_bind(self.train_queue, self.train_exchange, self.train_routing_key)
             # endregion
+            # region创建训练素材解包队列
+            channel.exchange_declare(self.package_exchange, "topic", passive=True, durable=True)
+            channel.queue_declare(self.package_queue, passive=True, durable=True)
+            channel.queue_bind(self.package_queue, self.package_exchange, self.package_routing_key)
+            # endregion
         except Exception as e:
             # region创建训练队列
             channel = connection.channel()
             channel.exchange_declare(self.train_exchange, "topic", durable=True)
             channel.queue_declare(self.train_queue)
             channel.queue_bind(self.train_queue, self.train_exchange, self.train_routing_key)
+            # endregion
+            # region创建训练素材解包队列
+            channel = connection.channel()
+            channel.exchange_declare(self.package_exchange, "topic", durable=True)
+            channel.queue_declare(self.package_queue)
+            channel.queue_bind(self.package_queue, self.package_exchange, self.package_routing_key)
             # endregion
         return channel
         # self.get_one(channel)
@@ -91,16 +117,16 @@ if __name__ == '__main__':
     ch = ff.init()
 
 
+    def callback(ch, method, properties, body):  # 参数body是发送过来的消息。
         print(ch, method, properties)
         print('\n[x] Received %r' % body)
         os.system("notify-send '训练队列' '%s' -t %d" % (body, 100000))
-
         # 1.开始训练
         # 2.训练结束后生成done.txt 在目录下
         # 答复此条消息已经处理完成，这里要判断，在目录下有没有done.txt，有的话就回复完成
         # ch.basic_ack(method.delivery_tag)
 
-    print(channel.basic_get(queue='ai.train.topic-queue', auto_ack=False))
+    # ch.basic_consume('ai.train.topic-queue', callback)
 
     # region 定时主动获取队列中的一条训练数据
     def get_one():
