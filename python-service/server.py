@@ -2,6 +2,7 @@
 import pika
 import os
 from retry import retry
+import time
 from apscheduler.schedulers.background import BackgroundScheduler
 
 # rabbitmq 文档 https://pika.readthedocs.io/en/stable/modules/channel.html
@@ -36,13 +37,17 @@ if __name__ == '__main__':
         # 答复此条消息已经处理完成，这里要判断，在目录下有没有done.txt，有的话就回复完成
         # ch.basic_ack(method.delivery_tag)
 
+    print(channel.basic_get(queue='ai.train.topic-queue', auto_ack=False))
+    time.sleep(6)
+    print(channel.basic_get(queue='ai.train.topic-queue', auto_ack=False))
+    print(channel.basic_get(queue='ai.train.topic-queue', auto_ack=False))
+    print(channel.basic_get(queue='ai.train.topic-queue', auto_ack=False))
+    print(channel.basic_get(queue='ai.train.topic-queue', auto_ack=False))
 
-    # channel.basic_get(queue='ai.train.topic-queue', auto_ack=False,  callback=backcall)
-
-    channel.basic_consume('ai.train.topic-queue', backcall)
+    # channel.basic_consume('ai.train.topic-queue', backcall)
         # backcall,  # 回调函数。执行结束后立即执行另外一个函数返回给发送端是否执行完毕。
         #                   queue=,
                           # )  # 如果注释掉，对方没有收到消息的话不会将消息丢失，始终在队列里等待下次发送。
 
     print('waiting for message To exit   press CTRL+C')
-    channel.start_consuming()  # 启动后进入死循环。一直等待消息。
+    # channel.start_consuming()  # 启动后进入死循环。一直等待消息。
