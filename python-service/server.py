@@ -17,7 +17,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 log.basicConfig(level=log.INFO,  # 控制台打印的日志级别
                 filename='server.log',
-                filemode='a',  ##模式，有w和a，w就是写模式，每次都会重新写日志，覆盖之前的日志
+                filemode='a',  # 模式，有w和a，w就是写模式，每次都会重新写日志，覆盖之前的日志
                 # a是追加模式，默认如果不写的话，就是追加模式
                 format=
                 '%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s'
@@ -27,10 +27,14 @@ log.basicConfig(level=log.INFO,  # 控制台打印的日志级别
 
 class pikaqiu(object):
 
-    def __init__(self, host='localhost', port=5672, username='guest', password='guest',
+    def __init__(self, host='localhost', port=5672,
+                 username='guest', password='guest', package_base_path='/home/baymin/daily-work/ftp/',
                  train_exchange='ai.train.topic', train_queue='ai.train.topic-queue', train_routing_key='train.start.#',
-                 package_exchange='ai.package.topic', package_queue='ai.package.topic-queue', package_routing_key='package.upload-done.#'
+                 package_exchange='ai.package.topic', package_queue='ai.package.topic-queue',
+                 package_routing_key='package.upload-done.#'
                  ):
+        self.channel = None
+        self.package_base_path = package_base_path
         self.host = host
         self.port = port
         self.username = username
@@ -49,37 +53,51 @@ class pikaqiu(object):
 
         # self.consume()
 
-    @retry(pika.exceptions.AMQPConnectionError, delay=5, jitter=(1, 3))
-    def consume(self, channel, on_message_callback=None):
-        log.info('consume:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-        channel.basic_consume(self.package_queue, on_message_callback)
-        try:
-            channel.start_consuming()
-        # Don't recover connections closed by server
-        except pika.exceptions.ConnectionClosedByBroker:
-            pass
-
-    def get_one(self, channel):
-        log.info('get:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-        os.system("notify-send '%s' '%s' -t %d" % ('ceshi', '测试', 10000))
-        method_frame, header_frame, body = channel.basic_get(queue='ai.train.topic-queue', auto_ack=False)
-        # chan.basic_ack(msg.delivery_tag)
-        # It can be empty if the queue is empty so don't do anything
+    def get_package_one(self):
+        log.info('get_package_one:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        os.system("notify-send '%s' '%s' -t %d" % ('解包', '解包数据', 10000))
+        method_frame, header_frame, body = self.channel.basic_get(queue=self.package_queue, auto_ack=False)
         if method_frame is None:
-            print("Empty Basic.Get Response (Basic.GetEmpty)")
+            print("解包数据：Empty Basic.Get Response (Basic.GetEmpty)")
             return None, None
             # We have data
         else:
-            print("%s Basic.GetOk %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            print("解包数据： %s %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                                       header_frame.content_type,
+                                                       method_frame.delivery_tag,
+                                                       body.decode('utf-8')))
+            tar_name = body.decode('utf-8')
+            log.info('开始解包')
+            os.system("tar -xvf %s/%s -C %s" % (self.package_base_path, tar_name, self.package_base_path))
+            ch.basic_ack(method_frame.delivery_tag)
+            return method_frame.delivery_tag, body.decode('utf-8')
+
+    def get_train_one(self):
+        log.info('get_train_one:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        os.system("notify-send '%s' '%s' -t %d" % ('ceshi', '测试', 10000))
+        method_frame, header_frame, body = self.channel.basic_get(queue=self.train_queue, auto_ack=False)
+        # chan.basic_ack(msg.delivery_tag)
+        # It can be empty if the queue is empty so don't do anything
+
+        # 这里需要检查训练素材包是否已经解包，如果未解包，这里需要拒绝，让它重新排队self.channel.basic_nack
+        if body 里的路径 不存在(解包路径不存在)
+            self.channel.basic_nack(method_frame.delivery_tag)
+        if method_frame is None:
+            print("训练：Empty Basic.Get Response (Basic.GetEmpty)")
+            return None, None
+            # We have data
+        else:
+            print("训练：%s Basic.GetOk %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                                              header_frame.content_type,
                                                              method_frame.delivery_tag,
-                                                             body))
-            return method_frame.delivery_tag, body
+                                                             body.decode('utf-8')))
+            return method_frame.delivery_tag, body.decode('utf-8')
 
     @retry(pika.exceptions.AMQPConnectionError, delay=5, jitter=(1, 3))
     def init(self):
         connection = pika.BlockingConnection(self.parameters)
         channel = connection.channel()
+        self.channel = channel
         try:
             # region创建训练队列
             channel.exchange_declare(self.train_exchange, "topic", passive=True, durable=True)
@@ -113,29 +131,30 @@ if __name__ == '__main__':
     # connection = pika.BlockingConnection(pika.ConnectionParameters(host='192.168.31.157', port=5672, credentials=credentials))    #('192.168.31.157', 5672, '/', credentials))
     # channel = connection.channel()
 
-    ff = pikaqiu(host='192.168.31.157', username='baymin', password='baymin1024')
+    ff = pikaqiu(host='192.168.31.157', username='baymin', password='baymin1024', package_base_path='/home/baymin/daily-work/ftp/')
     ch = ff.init()
 
-
-    def callback(ch, method, properties, body):  # 参数body是发送过来的消息。
-        print(ch, method, properties)
+    # region 定时获取解包队列一条数据
+    def get_package(channel, method, properties, body):  # 参数body是发送过来的消息。
+        print(channel, method, properties)
         print('\n[x] Received %r' % body)
         os.system("notify-send '训练队列' '%s' -t %d" % (body, 100000))
         # 1.开始训练
         # 2.训练结束后生成done.txt 在目录下
         # 答复此条消息已经处理完成，这里要判断，在目录下有没有done.txt，有的话就回复完成
         # ch.basic_ack(method.delivery_tag)
-
-    # ch.basic_consume('ai.train.topic-queue', callback)
+    # endregion
 
     # region 定时主动获取队列中的一条训练数据
-    def get_one():
-        delivery_tag, body = ff.get_one(ch)
+    def get_train():
+        delivery_tag, body = ff.get_train_one(ch)
         print(body.decode('utf-8'))
         project = json.loads(body.decode('utf-8'))
         print(project["ip"])
         ch.basic_ack(delivery_tag)
 
+
+    # endregion
 
     # 创建后台执行的 schedulers
     scheduler = BackgroundScheduler()
@@ -143,10 +162,12 @@ if __name__ == '__main__':
 
     # 提醒写日报
     # scheduler.add_job(remind, 'cron', second="0/2")
-    scheduler.add_job(get_one, 'interval', seconds=10)
+    scheduler.add_job(ff.get_train_one, 'interval', seconds=15)
+    scheduler.add_job(ff.get_package_one, 'interval', seconds=8)
     scheduler.start()
-    # endregion
 
+    print("start")
+    # ff.consume(ch, on_message_callback)
     embed()
 
     # 声明queue
