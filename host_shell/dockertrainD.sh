@@ -2,7 +2,7 @@
 password="icubic-123"
 port=8097
 peoject_name=""
-volume=""
+volume=
 registry="registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-v3.6"
 print_help() {
 cat <<EOF
@@ -35,7 +35,7 @@ while getopts "p:n:v:r:w:gh" opt; do
       password=$OPTARG
       ;;
     g)
-      echo $password | sudo -S cp -rf dockertrain /usr/local/bin/
+      echo $password | sudo -S cp -rf dockertrainD /usr/local/bin/
       exit 1
       ;;
     h)
@@ -69,7 +69,7 @@ echo "* 映射的目录：$volume"
 echo "* 镜像：$registry"
 echo "******************************"
 
-if [ -n volume ];then
+if [ -z $volume ];then
   echo "映射目录不可为空"
   exit 1
 fi  

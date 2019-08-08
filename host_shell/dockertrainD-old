@@ -6,13 +6,13 @@ volume=
 registry="registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-v3.6"
 print_help() {
 cat <<EOF
-usage:	dockertrainD	-p  映射到本地的端口 默认8097 如果被占用会自动分配，只检测端口占用情况，可能存在多个未开启的容器相同端口的情况
-			-n  项目名 默认 ""
-			-v  需要映射的素材目录(必填)
-			-r  docker镜像的地址 默认registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-v3.6
-			-w  root密码 默认icubic-123
-			-g  复制脚本到/usr/local/bin/，后面执行可以全局dockertrainD
-			-h  帮助
+usage:  dockertrainD-old  -p  映射到本地的端口 默认8097 如果被占用会自动分配，只检测端口占用情况，可能存在多个未开启的容器相同端口的情况
+                          -n  项目名 默认 ""
+                          -v  需要映射的素材目录(必填)
+                          -r  docker镜像的地址 默认registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-v3.6
+                          -w  root密码 默认icubic-123
+                          -g  复制脚本到/usr/local/bin/，后面执行可以全局dockertrainD
+                          -h  帮助
 EOF
 exit 1
 }
@@ -35,7 +35,7 @@ while getopts "p:n:v:r:w:gh" opt; do
       password=$OPTARG
       ;;
     g)
-      echo $password | sudo -S cp -rf dockertrainD /usr/local/bin/
+      echo $password | sudo -S cp -rf dockertrainD-old /usr/local/bin/
       exit 1
       ;;
     h)
@@ -75,4 +75,4 @@ if [ -z $volume ];then
 fi  
 
 nvidia-smi
-echo $password | sudo -S docker run --gpus all -d -p $port:8097 -v $volume:/Detectron/detectron/datasets/data/ --name $peoject_name$port $registry
+echo $password | sudo -S nvidia-docker run -d -p $port:8097 -v $volume:/Detectron/detectron/datasets/data/ --name $peoject_name$port $registry
