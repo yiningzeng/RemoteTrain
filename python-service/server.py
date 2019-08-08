@@ -108,11 +108,18 @@ class pikaqiu(object):
                                       -r  docker镜像的地址 默认registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-v3.6
                                       -w  root密码 默认icubic-123
                                       -g  复制脚本到/usr/local/bin/，后面执行可以全局dockertrainD
+                                      -o  日志的输出目录默认/var/log/train
+                                      -t  docker的gup版本，默认是最新版本2，设置1：nvidia-docker，2：docker run --gpus all
                                       -h  帮助
                 '''
-                cmd = "dockertrainD-old -n %s -v %s -w %s" % (train_info["assetsDir"], self.package_base_path + train_info["assetsDir"], "baymin1024")
+                cmd = "dockertrainD -n %s -v %s -w %s -t 1" % (train_info["assetsDir"], self.package_base_path + train_info["assetsDir"], "baymin1024")
                 print("训练命令： %s" % cmd)
+                # 执行训练，并返回容器的id
                 os.system(cmd)
+                # 保存容器的id到训练目录
+                # cmd2 = "echo %s > %s/container_id.txt" % (container_id, self.package_base_path + train_info["assetsDir"])
+                # os.system(cmd2)
+                ch.basic_ack(method_frame.delivery_tag)
                 print("训练：%s Basic.GetOk %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                                              header_frame.content_type,
                                                              method_frame.delivery_tag,
@@ -156,7 +163,6 @@ if __name__ == '__main__':
     # credentials = pika.PlainCredentials('baymin','baymin1024')
     # connection = pika.BlockingConnection(pika.ConnectionParameters(host='192.168.31.157', port=5672, credentials=credentials))    #('192.168.31.157', 5672, '/', credentials))
     # channel = connection.channel()
-
     ff = pikaqiu(host='192.168.31.157', username='baymin', password='baymin1024', package_base_path='/home/baymin/daily-work/ftp/')
     ch = ff.init()
 

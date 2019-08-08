@@ -3,27 +3,40 @@ password="icubic-123"
 port=8097
 peoject_name=""
 volume=
+docker_type=2
+log="/var/log/train"
 registry="registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-v3.6"
+
+log() {
+	echo $1 >> "$log/$peoject_name$port.log" 2>&1
+}
+
 print_help() {
 cat <<EOF
-usage:	dockertrainD	-p  映射到本地的端口 默认8097 如果被占用会自动分配，只检测端口占用情况，可能存在多个未开启的容器相同端口的情况
-			-n  项目名 默认 ""
-			-v  需要映射的素材目录(必填)
-			-r  docker镜像的地址 默认registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-v3.6
-			-w  root密码 默认icubic-123
-			-g  复制脚本到/usr/local/bin/，后面执行可以全局dockertrainD
-			-h  帮助
+执行后会在 -v 目录下生成 容器的id container_id.txt
+usage:  dockertrainD  -p  映射到本地的端口 默认8097 如果被占用会自动分配，只检测端口占用情况，可能存在多个未开启的容器相同端口的情况
+                          -n  项目名 默认 ""
+                          -v  需要映射的素材目录(必填)
+                          -r  docker镜像的地址 默认registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-v3.6
+                          -w  root密码 默认icubic-123
+                          -g  复制脚本到/usr/local/bin/，后面执行可以全局dockertrainD
+			  -o  日志的输出目录默认/var/log/train
+			  -t  docker的gup版本，默认是最新版本2，设置1：nvidia-docker，2：docker run --gpus all
+                          -h  帮助
 EOF
 exit 1
 }
 
-while getopts "p:n:v:r:w:gh" opt; do
+while getopts "p:n:v:r:w:t:o:gh" opt; do
   case $opt in
     p)
       port=$OPTARG
       ;;
     n)
       project_name=$OPTARG
+      ;;
+    o)
+      log=$OPTARG
       ;;
     v)
       volume=$OPTARG
@@ -34,12 +47,16 @@ while getopts "p:n:v:r:w:gh" opt; do
     w)
       password=$OPTARG
       ;;
+    t)
+      docker_type=$OPTARG
+      ;;
     g)
       echo $password | sudo -S cp -rf dockertrainD /usr/local/bin/
       exit 1
       ;;
     h)
       print_help
+      log "开始啦"
       ;;
     \?)
       print_help
@@ -47,27 +64,32 @@ while getopts "p:n:v:r:w:gh" opt; do
   esac
 done
 
-echo "首先判断端口是否占用情况"
+echo $password | sudo -S mkdir -p $log
+echo $password | sudo -S chmod -R 777 $log
+
+log "首先判断端口是否占用情况"
 
 while :
 do
         if netstat -tlpn | grep $port
         then
-                echo "端口占用"
+                log "端口占用"
                 port=`expr $port + 1`
         else
-                echo "$port端口可用"
+                log "$port端口可用"
                 break
         fi
 done
 
-echo "******************************"
-echo "* 最终数据："
-echo "* 端口：$port"
-echo "* 项目名：$project_name"
-echo "* 映射的目录：$volume"
-echo "* 镜像：$registry"
-echo "******************************"
+log "******************************" 
+log "* 最终数据："
+log "* 端口：$port"
+log "* 项目名：$project_name"
+log "* 映射的目录：$volume"
+log "* 日志目录：$log"
+log "* 镜像：$registry"
+log "* docker gpu版本命令：$docker_type"
+log "******************************"
 
 if [ -z $volume ];then
   echo "映射目录不可为空"
@@ -75,4 +97,8 @@ if [ -z $volume ];then
 fi  
 
 nvidia-smi
-echo $password | sudo -S docker run --gpus all -d -p $port:8097 -v $volume:/Detectron/detectron/datasets/data/ --name $peoject_name$port $registry
+if [ $docker_type -eq 2 ];then
+	echo $password | sudo -S docker run --gpus all -d -p $port:8097 -v $volume:/Detectron/detectron/datasets/data/ --name $peoject_name$port $registry > "$volume/container_id.txt" 2>&1
+else
+	echo $password | sudo -S nvidia-docker run -d -p $port:8097 -v $volume:/Detectron/detectron/datasets/data/ --name $peoject_name$port $registry > "$volume/container_id.txt" 2>&1
+fi

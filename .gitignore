@@ -2,3 +2,5 @@
 python-service/\.idea/
 
 *.log
+
+*.swp
