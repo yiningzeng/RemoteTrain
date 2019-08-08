@@ -53,6 +53,9 @@ class pikaqiu(object):
 
         # self.consume()
 
+    '''
+    获取单个解包队列数据
+    '''
     def get_package_one(self):
         log.info('get_package_one:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         os.system("notify-send '%s' '%s' -t %d" % ('解包', '解包数据', 10000))
@@ -72,6 +75,9 @@ class pikaqiu(object):
             ch.basic_ack(method_frame.delivery_tag)
             return method_frame.delivery_tag, body.decode('utf-8')
 
+    '''
+    获取单个训练队列数据
+    '''
     def get_train_one(self):
         log.info('get_train_one:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         os.system("notify-send '%s' '%s' -t %d" % ('ceshi', '测试', 10000))
