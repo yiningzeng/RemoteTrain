@@ -69,9 +69,11 @@ class pikaqiu(object):
                                                        header_frame.content_type,
                                                        method_frame.delivery_tag,
                                                        body.decode('utf-8')))
-            tar_name = body.decode('utf-8')
+            package_info = json.loads(body.decode('utf-8'))
             log.info('开始解包')
-            os.system("tar -xvf %s/%s -C %s" % (self.package_base_path, tar_name, self.package_base_path))
+            os.system("tar -xvf %s/%s -C %s" % (self.package_base_path, package_info["packageName"], self.package_base_path))
+            os.system("echo 1 > %s/%s/untar.txt" % (self.package_base_path, package_info["packageDir"]))
+            os.system("rm %s/%s" % (self.package_base_path, package_info["packageName"]))
             ch.basic_ack(method_frame.delivery_tag)
             return method_frame.delivery_tag, body.decode('utf-8')
 
