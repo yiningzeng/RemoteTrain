@@ -87,15 +87,31 @@ class pikaqiu(object):
         # chan.basic_ack(msg.delivery_tag)
         # It can be empty if the queue is empty so don't do anything
 
-        # 这里需要检查训练素材包是否已经解包，如果未解包，这里需要拒绝，让它重新排队self.channel.basic_nack
-        if body 里的路径 不存在(解包路径不存在)
-            self.channel.basic_nack(method_frame.delivery_tag)
         if method_frame is None:
             print("训练：Empty Basic.Get Response (Basic.GetEmpty)")
             return None, None
             # We have data
         else:
-            print("训练：%s Basic.GetOk %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            # 这里需要检查训练素材包是否已经解包，如果未解包，这里需要拒绝，让它重新排队self.channel.basic_nack
+            train_info = json.loads(body.decode('utf-8'))
+            if not os.path.exists("%s%s/untar.txt" % (self.package_base_path, train_info["assetsDir"])):
+                log.info('%s 未解包完成' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                self.channel.basic_nack(method_frame.delivery_tag)
+                print("解包未完成")
+            else:
+                '''
+                usage:  dockertrainD  -p  映射到本地的端口 默认8097 如果被占用会自动分配，只检测端口占用情况，可能存在多个未开启的容器相同端口的情况
+                                      -n  项目名 默认 ""
+                                      -v  需要映射的素材目录(必填)
+                                      -r  docker镜像的地址 默认registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-v3.6
+                                      -w  root密码 默认icubic-123
+                                      -g  复制脚本到/usr/local/bin/，后面执行可以全局dockertrainD
+                                      -h  帮助
+                '''
+                cmd = "dockertrainD-old -n %s -v %s -w %s" % (train_info["assetsDir"], self.package_base_path + train_info["assetsDir"], "baymin1024")
+                print("训练命令： %s" % cmd)
+                os.system(cmd)
+                print("训练：%s Basic.GetOk %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                                              header_frame.content_type,
                                                              method_frame.delivery_tag,
                                                              body.decode('utf-8')))
