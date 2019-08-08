@@ -14,6 +14,20 @@ from apscheduler.schedulers.background import BackgroundScheduler
 # pika https://pypi.org/project/pika/
 
 #
+
+'''
+usage:  dockertrainD  -p  映射到本地的端口 默认8097 如果被占用会自动分配，只检测端口占用情况，可能存在多个未开启的容器相同端口的情况
+                      -n  项目名 默认 ""
+                      -v  需要映射的素材目录(必填)
+                      -r  docker镜像的地址 默认registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-v3.6
+                      -w  root密码 默认icubic-123
+                      -g  复制脚本到/usr/local/bin/，后面执行可以全局dockertrainD
+                      -o  日志的输出目录默认/var/log/train
+                      -t  docker的gup版本，默认是最新版本2，设置1：nvidia-docker，2：docker run --gpus all
+                      -h  帮助
+'''
+
+
 '''
 第一次运行一定要保证queue要存在，就是直接运行两次
 '''
@@ -75,6 +89,7 @@ class pikaqiu(object):
             log.info('开始解包')
             os.system("tar -xvf %s/%s -C %s" % (self.package_base_path, package_info["packageName"], self.package_base_path))
             os.system("echo 1 > %s/%s/untar.txt" % (self.package_base_path, package_info["packageDir"]))
+            os.system("echo 等待训练 > %s/%s/train_status.txt" % (self.package_base_path, package_info["packageDir"]))
             os.system("rm %s/%s" % (self.package_base_path, package_info["packageName"]))
             ch.basic_ack(method_frame.delivery_tag)
             return method_frame.delivery_tag, body.decode('utf-8')
@@ -101,25 +116,32 @@ class pikaqiu(object):
                 self.channel.basic_nack(method_frame.delivery_tag)
                 print("解包未完成")
             else:
-                '''
-                usage:  dockertrainD  -p  映射到本地的端口 默认8097 如果被占用会自动分配，只检测端口占用情况，可能存在多个未开启的容器相同端口的情况
-                                      -n  项目名 默认 ""
-                                      -v  需要映射的素材目录(必填)
-                                      -r  docker镜像的地址 默认registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-v3.6
-                                      -w  root密码 默认icubic-123
-                                      -g  复制脚本到/usr/local/bin/，后面执行可以全局dockertrainD
-                                      -o  日志的输出目录默认/var/log/train
-                                      -t  docker的gup版本，默认是最新版本2，设置1：nvidia-docker，2：docker run --gpus all
-                                      -h  帮助
-                '''
-                cmd = "dockertrainD -n %s -v %s -w %s -t 1" % (train_info["assetsDir"], self.package_base_path + train_info["assetsDir"], "baymin1024")
-                print("训练命令： %s" % cmd)
+                # 判断训练状态文件是否存在框架
+                if not os.path.exists("%s%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"])):
+                    log.info('%s 等待训练' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                    os.system("echo 等待训练 > %s/%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"]))
+                    self.channel.basic_nack(method_frame.delivery_tag)
+                    print("等待训练")
+                else:
+                    status = os.popen("cat  %s/%s/train_status.txt | head -n 1" %
+                                      (self.package_base_path, train_info["assetsDir"])).read().replace('\n', '')
+                    if status == "等待训练":
+                        os.system("dockertrainD -n %s -v %s -w %s -t 1" %
+                                  (train_info["assetsDir"], self.package_base_path + train_info["assetsDir"], "baymin1024"))
+                        os.system("echo 正在训练 > %s/%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"]))
+                        self.channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
+                        # 这里要更新数据库
+                    elif status == "正在训练":
+                        self.channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
+                    elif status == "训练完成":
+                        # 这里要更新数据库
+                        self.channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
+
                 # 执行训练，并返回容器的id
-                os.system(cmd)
+
                 # 保存容器的id到训练目录
                 # cmd2 = "echo %s > %s/container_id.txt" % (container_id, self.package_base_path + train_info["assetsDir"])
                 # os.system(cmd2)
-                ch.basic_ack(method_frame.delivery_tag)
                 print("训练：%s Basic.GetOk %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                                              header_frame.content_type,
                                                              method_frame.delivery_tag,
@@ -160,6 +182,10 @@ class pikaqiu(object):
 
 
 if __name__ == '__main__':
+    id = os.popen('cat /home/baymin/daily-work/ftp/train-assets-cizhuan-fasterRcnn-20190808/container_id.txt | head -n 1').read().replace('\n', '')
+
+    print(id)
+
     # credentials = pika.PlainCredentials('baymin','baymin1024')
     # connection = pika.BlockingConnection(pika.ConnectionParameters(host='192.168.31.157', port=5672, credentials=credentials))    #('192.168.31.157', 5672, '/', credentials))
     # channel = connection.channel()
