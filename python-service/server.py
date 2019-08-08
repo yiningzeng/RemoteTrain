@@ -14,7 +14,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 # pika https://pypi.org/project/pika/
 
 #
-
+'''
+第一次运行一定要保证queue要存在，就是直接运行两次
+'''
 log.basicConfig(level=log.INFO,  # 控制台打印的日志级别
                 filename='server.log',
                 filemode='a',  # 模式，有w和a，w就是写模式，每次都会重新写日志，覆盖之前的日志
