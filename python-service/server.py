@@ -1,11 +1,12 @@
 # !/usr/bin/env python
-import pika
 import os
+import pika
 import json
-from retry import retry
 import time
+import psycopg2
 from wxpy import *
 import logging as log
+from retry import retry
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -14,6 +15,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 # pika https://pypi.org/project/pika/
 
 #
+
 
 '''
 usage:  dockertrainD  -p  映射到本地的端口 默认8097 如果被占用会自动分配，只检测端口占用情况，可能存在多个未开启的容器相同端口的情况
@@ -26,7 +28,6 @@ usage:  dockertrainD  -p  映射到本地的端口 默认8097 如果被占用会
                       -t  docker的gup版本，默认是最新版本2，设置1：nvidia-docker，2：docker run --gpus all
                       -h  帮助
 '''
-
 
 '''
 第一次运行一定要保证queue要存在，就是直接运行两次
@@ -43,7 +44,7 @@ log.basicConfig(level=log.INFO,  # 控制台打印的日志级别
 
 class pikaqiu(object):
 
-    def __init__(self, host='localhost', port=5672,
+    def __init__(self, root_password='icubic-123', host='localhost', port=5672,
                  username='guest', password='guest', package_base_path='/home/baymin/daily-work/ftp/',
                  train_exchange='ai.train.topic', train_queue='ai.train.topic-queue', train_routing_key='train.start.#',
                  package_exchange='ai.package.topic', package_queue='ai.package.topic-queue',
@@ -51,6 +52,7 @@ class pikaqiu(object):
                  ):
         self.channel = None
         self.package_base_path = package_base_path
+        self.root_password = root_password
         self.host = host
         self.port = port
         self.username = username
@@ -66,12 +68,15 @@ class pikaqiu(object):
         self.package_routing_key = package_routing_key
         # endregion
         self.parameters = pika.URLParameters("amqp://%s:%s@%s:%d" % (username, password, host, port))
-
+        # region postgres
+        self.postgres_conn = None
+        # endregion
         # self.consume()
 
     '''
     获取单个解包队列数据
     '''
+
     def get_package_one(self):
         log.info('get_package_one:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         os.system("notify-send '%s' '%s' -t %d" % ('解包', '解包数据', 10000))
@@ -87,7 +92,8 @@ class pikaqiu(object):
                                                        body.decode('utf-8')))
             package_info = json.loads(body.decode('utf-8'))
             log.info('开始解包')
-            os.system("tar -xvf %s/%s -C %s" % (self.package_base_path, package_info["packageName"], self.package_base_path))
+            os.system(
+                "tar -xvf %s/%s -C %s" % (self.package_base_path, package_info["packageName"], self.package_base_path))
             os.system("echo 1 > %s/%s/untar.txt" % (self.package_base_path, package_info["packageDir"]))
             os.system("echo 等待训练 > %s/%s/train_status.txt" % (self.package_base_path, package_info["packageDir"]))
             os.system("rm %s/%s" % (self.package_base_path, package_info["packageName"]))
@@ -97,6 +103,7 @@ class pikaqiu(object):
     '''
     获取单个训练队列数据
     '''
+
     def get_train_one(self):
         log.info('get_train_one:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         os.system("notify-send '%s' '%s' -t %d" % ('ceshi', '测试', 10000))
@@ -116,7 +123,7 @@ class pikaqiu(object):
                 self.channel.basic_nack(method_frame.delivery_tag)
                 print("解包未完成")
             else:
-                # 判断训练状态文件是否存在框架
+                # 判断训练状态文件是否存在
                 if not os.path.exists("%s%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"])):
                     log.info('%s 等待训练' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
                     os.system("echo 等待训练 > %s/%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"]))
@@ -126,9 +133,14 @@ class pikaqiu(object):
                     status = os.popen("cat  %s/%s/train_status.txt | head -n 1" %
                                       (self.package_base_path, train_info["assetsDir"])).read().replace('\n', '')
                     if status == "等待训练":
+
                         os.system("dockertrainD -n %s -v %s -w %s -t 1" %
-                                  (train_info["assetsDir"], self.package_base_path + train_info["assetsDir"], "baymin1024"))
-                        os.system("echo 正在训练 > %s/%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"]))
+                                  (train_info["assetsDir"],
+                                   self.package_base_path + train_info["assetsDir"],
+                                   self.root_password))
+
+                        os.system("echo 正在训练 > %s/%s/train_status.txt" % (self.package_base_path,
+                                                                          train_info["assetsDir"]))
                         self.channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
                         # 这里要更新数据库
                     elif status == "正在训练":
@@ -136,17 +148,25 @@ class pikaqiu(object):
                     elif status == "训练完成":
                         # 这里要更新数据库
                         self.channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
-
-                # 执行训练，并返回容器的id
-
-                # 保存容器的id到训练目录
-                # cmd2 = "echo %s > %s/container_id.txt" % (container_id, self.package_base_path + train_info["assetsDir"])
-                # os.system(cmd2)
                 print("训练：%s Basic.GetOk %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                                             header_frame.content_type,
-                                                             method_frame.delivery_tag,
-                                                             body.decode('utf-8')))
+                                                                    header_frame.content_type,
+                                                                    method_frame.delivery_tag,
+                                                                    body.decode('utf-8')))
             return method_frame.delivery_tag, body.decode('utf-8')
+
+    '''
+        - *dbname*: the database name
+        - *database*: the database name (only as keyword argument)
+        - *user*: user name used to authenticate
+        - *password*: password used to authenticate
+        - *host*: database host address (defaults to UNIX socket if not provided)
+        - *port*: connection port number (defaults to 5432 if not provided)
+    :return: 
+    '''
+    def postgres_connect(self, host='localhost', port='5432', user='postgres', password='baymin1024', dbname='power_ai'):
+        self.postgres_conn = psycopg2.connect("host=%s port=%d user=%s password=%s dbname=%s" %
+                                              (host, port, user, password, dbname))
+        return True
 
     @retry(pika.exceptions.AMQPConnectionError, delay=5, jitter=(1, 3))
     def init(self):
@@ -182,14 +202,16 @@ class pikaqiu(object):
 
 
 if __name__ == '__main__':
-    id = os.popen('cat /home/baymin/daily-work/ftp/train-assets-cizhuan-fasterRcnn-20190808/container_id.txt | head -n 1').read().replace('\n', '')
+    # id = os.popen(
+    #     'cat /home/baymin/daily-work/ftp/train-assets-cizhuan-fasterRcnn-20190808/container_id.txt | head -n 1')
+    # .read().replace('\n', '')
+    #
+    # print(id)
 
-    print(id)
-
-    # credentials = pika.PlainCredentials('baymin','baymin1024')
-    # connection = pika.BlockingConnection(pika.ConnectionParameters(host='192.168.31.157', port=5672, credentials=credentials))    #('192.168.31.157', 5672, '/', credentials))
     # channel = connection.channel()
-    ff = pikaqiu(host='192.168.31.157', username='baymin', password='baymin1024', package_base_path='/home/baymin/daily-work/ftp/')
+
+    ff = pikaqiu(root_password='baymin1024', host='192.168.31.75', username='baymin', password='baymin1024',
+                 package_base_path='/home/baymin/daily-work/ftp/')
     ch = ff.init()
 
     # region 定时获取解包队列一条数据
@@ -201,6 +223,8 @@ if __name__ == '__main__':
         # 2.训练结束后生成done.txt 在目录下
         # 答复此条消息已经处理完成，这里要判断，在目录下有没有done.txt，有的话就回复完成
         # ch.basic_ack(method.delivery_tag)
+
+
     # endregion
 
     # region 定时主动获取队列中的一条训练数据
