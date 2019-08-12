@@ -96,9 +96,13 @@ if [ -z $volume ];then
   exit 1
 fi  
 
-nvidia-smi
+current=`date "+%Y-%m-%d %H:%M:%S"`
+timeStamp=`date -d "$current" +%s`
+currentTimeStamp=$((timeStamp*1000+`date "+%N"`/1000000))
+
 if [ $docker_type -eq 2 ];then
-	echo $password | sudo -S docker run --gpus all -d -p $port:8097 -v $volume:/Detectron/detectron/datasets/data/ --name $peoject_name$port $registry > "$volume/container_id.txt" 2>&1
+	echo $password | sudo -S docker run --gpus all -d -p $port:8097 -v $volume:/Detectron/detectron/datasets/data/ --name "$peoject_name$port-$currentTimeStamp" $registry > "$volume/container_id.txt" 2>&1
 else
-	echo $password | sudo -S nvidia-docker run -d -p $port:8097 -v $volume:/Detectron/detectron/datasets/data/ --name $peoject_name$port $registry > "$volume/container_id.txt" 2>&1
+	echo $password | sudo -S nvidia-docker run -d -p $port:8097 -v $volume:/Detectron/detectron/datasets/data/ --name "$peoject_name$port-$currentTimeStamp" $registry > "$volume/container_id.txt" 2>&1
 fi
+cat "$volume/container_id.txt"
