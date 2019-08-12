@@ -86,14 +86,13 @@ class pikaqiu(object):
             return None, None
             # We have data
         else:
-            print("解包数据： %s %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            print("解包数据： %s %s delivery-tag %s: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                                        header_frame.content_type,
                                                        method_frame.delivery_tag,
                                                        body.decode('utf-8')))
             package_info = json.loads(body.decode('utf-8'))
             log.info('开始解包')
-            os.system(
-                "tar -xvf %s/%s -C %s" % (self.package_base_path, package_info["packageName"], self.package_base_path))
+            os.system("tar -xvf %s/%s -C %s" % (self.package_base_path, package_info["packageName"], self.package_base_path))
             os.system("echo 1 > %s/%s/untar.txt" % (self.package_base_path, package_info["packageDir"]))
             os.system("echo 等待训练 > %s/%s/train_status.txt" % (self.package_base_path, package_info["packageDir"]))
             os.system("rm %s/%s" % (self.package_base_path, package_info["packageName"]))
@@ -126,7 +125,7 @@ class pikaqiu(object):
                 # 判断训练状态文件是否存在
                 if not os.path.exists("%s%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"])):
                     log.info('%s 等待训练' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-                    os.system("echo 等待训练 > %s/%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"]))
+                    os.system("echo '等待训练\c' > %s/%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"]))
                     self.channel.basic_nack(method_frame.delivery_tag)
                     print("等待训练")
                 else:
@@ -163,7 +162,7 @@ class pikaqiu(object):
         - *port*: connection port number (defaults to 5432 if not provided)
     :return: 
     '''
-    def postgres_connect(self, host='localhost', port='5432', user='postgres', password='baymin1024', dbname='power_ai'):
+    def postgres_connect(self, host='localhost', port=5432, user='postgres', password='baymin1024', dbname='power_ai'):
         self.postgres_conn = psycopg2.connect("host=%s port=%d user=%s password=%s dbname=%s" %
                                               (host, port, user, password, dbname))
         return True
