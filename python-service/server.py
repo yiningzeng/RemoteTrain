@@ -8,7 +8,10 @@ from wxpy import *
 import logging as log
 from retry import retry
 from datetime import datetime
+from flask import Flask, request
 from apscheduler.schedulers.background import BackgroundScheduler
+
+app = Flask(__name__)
 
 # rabbitmq 文档 https://pika.readthedocs.io/en/stable/modules/channel.html
 # retry https://github.com/invl/retry
@@ -132,7 +135,6 @@ class pikaqiu(object):
     '''
     获取单个训练队列数据
     '''
-
     def get_train_one(self):
         log.info('get_train_one:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         os.system("notify-send '%s' '%s' -t %d" % ('ceshi', '测试', 10000))
@@ -275,6 +277,16 @@ class pikaqiu(object):
         # self.get_one(channel)
 
 
+@app.route('/list', methods=['GET'])
+def main():
+    a, rows = ff.postgres_execute("SELECT to_char(create_time, 'YYYY-MM-DD HH24:MI:SS') FROM train_record", True)
+    if len(rows) > 0:
+        
+        return json.dumps(rows)
+    else:
+        return json.dumps([])
+
+
 if __name__ == '__main__':
     # id = os.popen(
     #     'cat /home/baymin/daily-work/ftp/train-assets-cizhuan-fasterRcnn-20190808/container_id.txt | head -n 1')
@@ -287,6 +299,7 @@ if __name__ == '__main__':
     ff = pikaqiu(root_password='baymin1024', host='192.168.31.75', username='baymin', password='baymin1024',
                  package_base_path='/home/baymin/daily-work/ftp/')
     ch = ff.init(sql_host='192.168.31.75')
+
 
     # region 定时获取解包队列一条数据
     def get_package(channel, method, properties, body):  # 参数body是发送过来的消息。
@@ -318,12 +331,26 @@ if __name__ == '__main__':
 
     # 提醒写日报
     # scheduler.add_job(remind, 'cron', second="0/2")
-    scheduler.add_job(ff.get_train_one, 'interval', seconds=15)
-    scheduler.add_job(ff.get_package_one, 'interval', seconds=8)
+
+    '''
+    weeks(int)	间隔几周
+    days(int)	间隔几天
+    hours(int)	间隔几小时
+    minutes(int)	间隔几分钟
+    seconds(int)	间隔多少秒
+    start_date(datetime or str)	开始日期
+    end_date(datetime or str)	结束日期
+    timezone(datetime.tzinfo or   str)	时区
+    '''
+    scheduler.add_job(ff.get_train_one, 'interval', minutes=30)
+    scheduler.add_job(ff.get_package_one, 'interval', minutes=20)
+    # scheduler.add_job(ff.get_train_one, 'interval', seconds=10)
+    # scheduler.add_job(ff.get_package_one, 'interval', seconds=5)
     scheduler.start()
 
     log.info("start")
     # ff.consume(ch, on_message_callback)
+    app.run(host="0.0.0.0", port=8888)
     embed()
 
     # 声明queue
