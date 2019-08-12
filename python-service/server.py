@@ -82,11 +82,11 @@ class pikaqiu(object):
         os.system("notify-send '%s' '%s' -t %d" % ('解包', '解包数据', 10000))
         method_frame, header_frame, body = self.channel.basic_get(queue=self.package_queue, auto_ack=False)
         if method_frame is None:
-            print("解包数据：Empty Basic.Get Response (Basic.GetEmpty)")
+            log.info("解包数据：Empty Basic.Get Response (Basic.GetEmpty)")
             return None, None
             # We have data
         else:
-            print("解包数据： %s %s delivery-tag %s: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            log.info("解包数据： %s %s delivery-tag %s: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                                        header_frame.content_type,
                                                        method_frame.delivery_tag,
                                                        body.decode('utf-8')))
@@ -141,7 +141,7 @@ class pikaqiu(object):
         # It can be empty if the queue is empty so don't do anything
 
         if method_frame is None:
-            print("训练：Empty Basic.Get Response (Basic.GetEmpty)")
+            log.info("训练：Empty Basic.Get Response (Basic.GetEmpty)")
             return None, None
             # We have data
         else:
@@ -150,14 +150,14 @@ class pikaqiu(object):
             if not os.path.exists("%s%s/untar.txt" % (self.package_base_path, train_info["assetsDir"])):
                 log.info('%s 未解包完成' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
                 self.channel.basic_nack(method_frame.delivery_tag)
-                print("解包未完成")
+                log.info("解包未完成")
             else:
                 # 判断训练状态文件是否存在
                 if not os.path.exists("%s%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"])):
                     log.info('%s 等待训练' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
                     os.system("echo '等待训练\c' > %s/%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"]))
                     self.channel.basic_nack(method_frame.delivery_tag)
-                    print("等待训练")
+                    log.info("等待训练")
                 else:
                     status = os.popen("cat  %s/%s/train_status.txt | head -n 1" %
                                       (self.package_base_path, train_info["assetsDir"])).read().replace('\n', '')
@@ -168,7 +168,7 @@ class pikaqiu(object):
                                         self.package_base_path + train_info["assetsDir"],
                                         self.root_password)).read().replace('\n', '')
                         if len(res) != 64:
-                            print("训练有误: %s" % res)
+                            log.info("训练有误: %s" % res)
                             return
                         # 如果res长度==64，那么就是container_id
 
@@ -181,7 +181,7 @@ class pikaqiu(object):
                               " assets_type='%s' where project_id='%s'" % \
                               (res, 2, train_info['providerType'],
                                train_info['assetsType'], train_info['projectId'])
-                        print("训练:"+sql)
+                        log.info("训练:"+sql)
                         self.postgres_execute(sql)
                         # endregion
 
@@ -197,7 +197,7 @@ class pikaqiu(object):
                             (3, train_info['projectId']))
                         # endregion
                         self.channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
-                print("训练：%s Basic.GetOk %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                log.info("训练：%s Basic.GetOk %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                                                     header_frame.content_type,
                                                                     method_frame.delivery_tag,
                                                                     body.decode('utf-8')))
@@ -220,9 +220,9 @@ class pikaqiu(object):
     def postgres_execute(self, sql=None, select=False):
         result = None
         if sql is None:
-            print("sql null")
+            log.info("sql null")
             return False, result
-        print(sql)
+        log.info(sql)
         try:
             cur = self.postgres_conn.cursor()
             cur.execute(sql)
@@ -233,7 +233,7 @@ class pikaqiu(object):
         except Exception:
             return False, result
         else:
-            print("sql执行成功")
+            log.info("sql执行成功")
             return True, result
 
     def postgres_disconnect(self):
@@ -290,8 +290,8 @@ if __name__ == '__main__':
 
     # region 定时获取解包队列一条数据
     def get_package(channel, method, properties, body):  # 参数body是发送过来的消息。
-        print(channel, method, properties)
-        print('\n[x] Received %r' % body)
+        log.info(channel, method, properties)
+        log.info('\n[x] Received %r' % body)
         os.system("notify-send '训练队列' '%s' -t %d" % (body, 100000))
         # 1.开始训练
         # 2.训练结束后生成done.txt 在目录下
@@ -304,9 +304,9 @@ if __name__ == '__main__':
     # region 定时主动获取队列中的一条训练数据
     def get_train():
         delivery_tag, body = ff.get_train_one(ch)
-        print(body.decode('utf-8'))
+        log.info(body.decode('utf-8'))
         project = json.loads(body.decode('utf-8'))
-        print(project["ip"])
+        log.info(project["ip"])
         ch.basic_ack(delivery_tag)
 
 
@@ -322,7 +322,7 @@ if __name__ == '__main__':
     scheduler.add_job(ff.get_package_one, 'interval', seconds=8)
     scheduler.start()
 
-    print("start")
+    log.info("start")
     # ff.consume(ch, on_message_callback)
     embed()
 
