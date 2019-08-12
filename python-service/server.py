@@ -96,6 +96,36 @@ class pikaqiu(object):
             os.system("echo 1 > %s/%s/untar.txt" % (self.package_base_path, package_info["packageDir"]))
             os.system("echo 等待训练 > %s/%s/train_status.txt" % (self.package_base_path, package_info["packageDir"]))
             os.system("rm %s/%s" % (self.package_base_path, package_info["packageName"]))
+            # region 更新数据库
+            # 这里插入前需要判断是否存在相同的项目
+            suc, rows = self.postgres_execute("SELECT * FROM train_record WHERE project_id='%s'" %
+                                              package_info['projectId'],
+                                              True)
+            if len(rows) > 0:
+                self.postgres_execute("UPDATE train_record SET "
+                                      "project_name='%s', status=%d,"
+                                      " assets_directory_base='%s', assets_directory_name='%s',"
+                                      " create_time='%s' WHERE project_id='%s'" %
+                                      (package_info['projectName'],
+                                       1,
+                                       self.package_base_path,
+                                       package_info["packageDir"],
+                                       datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                       package_info['projectId']))
+            else:
+                self.postgres_execute("INSERT INTO train_record "
+                                      "(project_id, project_name,"
+                                      " status, assets_directory_base,"
+                                      " assets_directory_name, create_time) "
+                
+                                      "VALUES ('%s', '%s', %d, '%s', '%s', '%s')" %
+                                      (package_info['projectId'],
+                                       package_info['projectName'],
+                                       1,
+                                       self.package_base_path,
+                                       package_info["packageDir"],
+                                       datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+            # endregion
             ch.basic_ack(method_frame.delivery_tag)
             return method_frame.delivery_tag, body.decode('utf-8')
 
@@ -132,20 +162,40 @@ class pikaqiu(object):
                     status = os.popen("cat  %s/%s/train_status.txt | head -n 1" %
                                       (self.package_base_path, train_info["assetsDir"])).read().replace('\n', '')
                     if status == "等待训练":
-
-                        os.system("dockertrainD -n %s -v %s -w %s -t 1" %
-                                  (train_info["assetsDir"],
-                                   self.package_base_path + train_info["assetsDir"],
-                                   self.root_password))
-
-                        os.system("echo 正在训练 > %s/%s/train_status.txt" % (self.package_base_path,
-                                                                          train_info["assetsDir"]))
                         self.channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
-                        # 这里要更新数据库
+                        res = os.popen("dockertrainD -n %s -v %s -w %s -t 1" %
+                                       (train_info["assetsDir"],
+                                        self.package_base_path + train_info["assetsDir"],
+                                        self.root_password)).read().replace('\n', '')
+                        if len(res) != 64:
+                            print("训练有误: %s" % res)
+                            return
+                        # 如果res长度==64，那么就是container_id
+
+                        os.system("echo '正在训练\c' > %s/%s/train_status.txt" %
+                                  (self.package_base_path,
+                                   train_info["assetsDir"]))
+
+                        # region 更新数据库
+                        sql = "UPDATE train_record SET container_id='%s', status=%d, net_framework='%s'," \
+                              " assets_type='%s' where project_id='%s'" % \
+                              (res, 2, train_info['providerType'],
+                               train_info['assetsType'], train_info['projectId'])
+                        print("训练:"+sql)
+                        self.postgres_execute(sql)
+                        # endregion
+
                     elif status == "正在训练":
                         self.channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
                     elif status == "训练完成":
-                        # 这里要更新数据库
+                        # region 更新数据库
+                        # os.system("echo '训练完成\c' > %s/%s/train_status.txt" % (self.package_base_path,
+                        #                                                       train_info["assetsDir"]))
+                        self.postgres_execute(
+                            "UPDATE train_record SET status=%d"
+                            "where project_id='%s'" %
+                            (3, train_info['projectId']))
+                        # endregion
                         self.channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
                 print("训练：%s Basic.GetOk %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                                                     header_frame.content_type,
@@ -167,8 +217,33 @@ class pikaqiu(object):
                                               (host, port, user, password, dbname))
         return True
 
+    def postgres_execute(self, sql=None, select=False):
+        result = None
+        if sql is None:
+            print("sql null")
+            return False, result
+        print(sql)
+        try:
+            cur = self.postgres_conn.cursor()
+            cur.execute(sql)
+            if select:
+                result = cur.fetchall()
+            self.postgres_conn.commit()
+            cur.close()
+        except Exception:
+            return False, result
+        else:
+            print("sql执行成功")
+            return True, result
+
+    def postgres_disconnect(self):
+        self.postgres_conn.close()
+        return True
+
     @retry(pika.exceptions.AMQPConnectionError, delay=5, jitter=(1, 3))
-    def init(self):
+    def init(self, sql=True, sql_host='localhost'):
+        if sql:
+            self.postgres_connect(host=sql_host)
         connection = pika.BlockingConnection(self.parameters)
         channel = connection.channel()
         self.channel = channel
@@ -211,7 +286,7 @@ if __name__ == '__main__':
 
     ff = pikaqiu(root_password='baymin1024', host='192.168.31.75', username='baymin', password='baymin1024',
                  package_base_path='/home/baymin/daily-work/ftp/')
-    ch = ff.init()
+    ch = ff.init(sql_host='192.168.31.75')
 
     # region 定时获取解包队列一条数据
     def get_package(channel, method, properties, body):  # 参数body是发送过来的消息。

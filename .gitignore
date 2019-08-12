@@ -4,3 +4,5 @@ python-service/\.idea/
 *.log
 
 *.swp
+
+python-service/sql\.py
