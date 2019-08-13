@@ -8,7 +8,7 @@ from wxpy import *
 import logging as log
 from retry import retry
 from datetime import datetime
-from flask import Flask, request
+from flask_cors import CORS
 from flask import Flask, request, Response
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -278,7 +278,7 @@ class pikaqiu(object):
         # self.get_one(channel)
 
 
-@app.route('/list', methods=['GET'])
+CORS(app, resources=r'/*')
 @app.route('/train_list', methods=['GET'])
 def main():
     num = request.args.get('num', type=int, default=20)
