@@ -9,6 +9,7 @@ import logging as log
 from retry import retry
 from datetime import datetime
 from flask import Flask, request
+from flask import Flask, request, Response
 from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
@@ -278,13 +279,29 @@ class pikaqiu(object):
 
 
 @app.route('/list', methods=['GET'])
+@app.route('/train_list', methods=['GET'])
 def main():
-    a, rows = ff.postgres_execute("SELECT to_char(create_time, 'YYYY-MM-DD HH24:MI:SS') FROM train_record", True)
-    if len(rows) > 0:
-        
-        return json.dumps(rows)
+    num = request.args.get('num', type=int, default=20)
+    page = request.args.get('page', type=int, default=0)
+    offset = num * page
+    ret_json = {"num": num, "page": page, "total": 0, "list": []}
+    i, count = ff.postgres_execute("SELECT COUNT(*) FROM train_record", True)
+    ret_json["total"] = count[0][0]
+    a, rows = ff.postgres_execute(
+        "SELECT id, project_id, container_id, project_name, status,"
+        " net_framework, assets_type, assets_directory_base, assets_directory_name,"
+        " is_jump, to_char(create_time, 'YYYY-MM-DD HH24:MI:SS') as create_time"
+        " FROM train_record order by create_time limit %d OFFSET %d" % (num, offset), True)
+    if rows is None or len(rows) == 0:
+        return json.dumps(ret_json)
     else:
-        return json.dumps([])
+        for row in rows:
+            ret_json["list"].append({'id': row[0], 'project_id': str(row[1]), 'container_id': str(row[2]),
+                                     'project_name': str(row[3]), 'status': row[4], 'net_framework': str(row[5]),
+                                     'assets_type': str(row[6]), 'assets_directory_base': str(row[7]),
+                                     'assets_directory_name': str(row[8]), 'is_jump': row[9], 'create_time': str(row[10])
+                                     })
+        return Response(json.dumps(ret_json), mimetype='application/json')
 
 
 if __name__ == '__main__':
@@ -299,31 +316,6 @@ if __name__ == '__main__':
     ff = pikaqiu(root_password='baymin1024', host='192.168.31.75', username='baymin', password='baymin1024',
                  package_base_path='/home/baymin/daily-work/ftp/')
     ch = ff.init(sql_host='192.168.31.75')
-
-
-    # region 定时获取解包队列一条数据
-    def get_package(channel, method, properties, body):  # 参数body是发送过来的消息。
-        log.info(channel, method, properties)
-        log.info('\n[x] Received %r' % body)
-        os.system("notify-send '训练队列' '%s' -t %d" % (body, 100000))
-        # 1.开始训练
-        # 2.训练结束后生成done.txt 在目录下
-        # 答复此条消息已经处理完成，这里要判断，在目录下有没有done.txt，有的话就回复完成
-        # ch.basic_ack(method.delivery_tag)
-
-
-    # endregion
-
-    # region 定时主动获取队列中的一条训练数据
-    def get_train():
-        delivery_tag, body = ff.get_train_one(ch)
-        log.info(body.decode('utf-8'))
-        project = json.loads(body.decode('utf-8'))
-        log.info(project["ip"])
-        ch.basic_ack(delivery_tag)
-
-
-    # endregion
 
     # 创建后台执行的 schedulers
     scheduler = BackgroundScheduler()
@@ -350,7 +342,7 @@ if __name__ == '__main__':
 
     log.info("start")
     # ff.consume(ch, on_message_callback)
-    app.run(host="0.0.0.0", port=8888)
+    app.run(host="0.0.0.0", port=18888)
     embed()
 
     # 声明queue
