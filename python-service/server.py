@@ -13,7 +13,7 @@ from flask import Flask, request, Response
 from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
-
+CORS(app, resources=r'/*')
 # rabbitmq 文档 https://pika.readthedocs.io/en/stable/modules/channel.html
 # retry https://github.com/invl/retry
 # pika https://pypi.org/project/pika/
@@ -91,12 +91,13 @@ class pikaqiu(object):
             # We have data
         else:
             log.info("解包数据： %s %s delivery-tag %s: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                                       header_frame.content_type,
-                                                       method_frame.delivery_tag,
-                                                       body.decode('utf-8')))
+                                                          header_frame.content_type,
+                                                          method_frame.delivery_tag,
+                                                          body.decode('utf-8')))
             package_info = json.loads(body.decode('utf-8'))
             log.info('开始解包')
-            os.system("tar -xvf %s/%s -C %s" % (self.package_base_path, package_info["packageName"], self.package_base_path))
+            os.system("tar -xvf %s/%s -C %s" %
+                      (self.package_base_path, package_info["packageName"], self.package_base_path))
             os.system("echo 1 > %s/%s/untar.txt" % (self.package_base_path, package_info["packageDir"]))
             os.system("echo 等待训练 > %s/%s/train_status.txt" % (self.package_base_path, package_info["packageDir"]))
             os.system("rm %s/%s" % (self.package_base_path, package_info["packageName"]))
@@ -121,7 +122,7 @@ class pikaqiu(object):
                                       "(project_id, project_name,"
                                       " status, assets_directory_base,"
                                       " assets_directory_name, create_time) "
-                
+
                                       "VALUES ('%s', '%s', %d, '%s', '%s', '%s')" %
                                       (package_info['projectId'],
                                        package_info['projectName'],
@@ -136,6 +137,7 @@ class pikaqiu(object):
     '''
     获取单个训练队列数据
     '''
+
     def get_train_one(self):
         log.info('get_train_one:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         os.system("notify-send '%s' '%s' -t %d" % ('ceshi', '测试', 10000))
@@ -158,7 +160,8 @@ class pikaqiu(object):
                 # 判断训练状态文件是否存在
                 if not os.path.exists("%s%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"])):
                     log.info('%s 等待训练' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-                    os.system("echo '等待训练\c' > %s/%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"]))
+                    os.system("echo '等待训练\c' > %s/%s/train_status.txt" %
+                              (self.package_base_path, train_info["assetsDir"]))
                     self.channel.basic_nack(method_frame.delivery_tag)
                     log.info("等待训练")
                 else:
@@ -184,7 +187,7 @@ class pikaqiu(object):
                               " assets_type='%s' where project_id='%s'" % \
                               (res, 2, train_info['providerType'],
                                train_info['assetsType'], train_info['projectId'])
-                        log.info("训练:"+sql)
+                        log.info("训练:" + sql)
                         self.postgres_execute(sql)
                         # endregion
 
@@ -201,9 +204,9 @@ class pikaqiu(object):
                         # endregion
                         self.channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
                 log.info("训练：%s Basic.GetOk %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                                                    header_frame.content_type,
-                                                                    method_frame.delivery_tag,
-                                                                    body.decode('utf-8')))
+                                                                       header_frame.content_type,
+                                                                       method_frame.delivery_tag,
+                                                                       body.decode('utf-8')))
             return method_frame.delivery_tag, body.decode('utf-8')
 
     '''
@@ -215,6 +218,7 @@ class pikaqiu(object):
         - *port*: connection port number (defaults to 5432 if not provided)
     :return: 
     '''
+
     def postgres_connect(self, host='localhost', port=5432, user='postgres', password='baymin1024', dbname='power_ai'):
         self.postgres_conn = psycopg2.connect("host=%s port=%d user=%s password=%s dbname=%s" %
                                               (host, port, user, password, dbname))
@@ -278,7 +282,6 @@ class pikaqiu(object):
         # self.get_one(channel)
 
 
-CORS(app, resources=r'/*')
 @app.route('/train_list', methods=['GET'])
 def main():
     num = request.args.get('num', type=int, default=20)
@@ -299,7 +302,8 @@ def main():
             ret_json["list"].append({'id': row[0], 'project_id': str(row[1]), 'container_id': str(row[2]),
                                      'project_name': str(row[3]), 'status': row[4], 'net_framework': str(row[5]),
                                      'assets_type': str(row[6]), 'assets_directory_base': str(row[7]),
-                                     'assets_directory_name': str(row[8]), 'is_jump': row[9], 'create_time': str(row[10])
+                                     'assets_directory_name': str(row[8]), 'is_jump': row[9],
+                                     'create_time': str(row[10])
                                      })
         return Response(json.dumps(ret_json), mimetype='application/json')
 
