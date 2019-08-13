@@ -6,3 +6,9 @@ python-service/\.idea/
 *.swp
 
 python-service/sql\.py
+
+web/dist/
+
+web/node_modules/
+
+web/\.idea/

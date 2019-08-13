@@ -1,0 +1,1 @@
+![预览图](https://gitee.com/baymin_gitee/img_batch_upload/raw/master/preview.png)
