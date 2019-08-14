@@ -137,7 +137,6 @@ class pikaqiu(object):
     '''
     获取单个训练队列数据
     '''
-
     def get_train_one(self):
         log.info('get_train_one:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         os.system("notify-send '%s' '%s' -t %d" % ('ceshi', '测试', 10000))
@@ -169,10 +168,32 @@ class pikaqiu(object):
                                       (self.package_base_path, train_info["assetsDir"])).read().replace('\n', '')
                     if status == "等待训练":
                         self.channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
-                        res = os.popen("dockertrainD -n %s -v %s -w %s -t 1" %
-                                       (train_info["assetsDir"],
+
+                        '''
+                        执行后会在 -v 目录下生成 容器的id container_id.txt
+                        usage:  dockertrain  -p  映射到本地的端口 默认8097 如果被占用会自动分配，只检测端口占用情况，可能存在多个未开启的容器相同端口的情况
+                                             -n  项目名 默认 ""
+                                             -v  需要映射的素材目录(必填)
+                                             -d  如果-f选择other那么-d必填，就是-v映射的容器内的目录
+                                             -r  docker镜像的地址 默认registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-auto-v3.6
+                                             -f  训练使用的网络默认detectron,可选darknet和other
+                                             -w  root密码 默认icubic-123
+                                             -g  复制脚本到/usr/local/bin/，后面执行可以全局dockertrainD
+                                             -o  日志的输出目录默认/var/log/train
+                                             -t  docker的gup版本，默认是最新版本2，设置1：nvidia-docker，2：docker run --gpus all
+                                             -h  帮助
+                        '''
+                        train_cmd = "dockertrain -n %s -v %s -w %s -t 2" % (train_info["assetsDir"],
                                         self.package_base_path + train_info["assetsDir"],
-                                        self.root_password)).read().replace('\n', '')
+                                        self.root_password)
+                        if train_info['providerType'] == 'yolov3':
+                            train_cmd = "dockertrain -n %s -v %s -w %s -t 2 -r %s -f %s" % (train_info["assetsDir"],
+                                        self.package_base_path + train_info["assetsDir"],
+                                        self.root_password,
+                                        "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v1.4",
+                                        "darknet")
+                        log.info("\n\n**************************\n训练的命令: %s\n**************************\n" % train_cmd)
+                        res = os.popen(train_cmd).read().replace('\n', '')
                         if len(res) != 64:
                             log.info("训练有误: %s" % res)
                             return
