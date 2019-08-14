@@ -1,0 +1,65 @@
+ip-white-list: 123.152.114.81,127.0.0.1,localhost #英文都好分割
+ip-black-list: 192.168.1.225 #英文都好分割
+baidu-face-score: 70 #百度检测低于多少分执行face++
+server:
+  connector-port: 8082
+  port: 8070
+#  ssl:
+#    key-store: vip.p12 #执行的时候一定要把.p12证书放在同一个目录
+#    key-store-type: PKCS12
+#    key-store-password: baymin1024
+#eureka:
+#  client:
+#    serviceUrl:
+#      defaultZone: http://192.168.0.109:8000/eureka/
+spring:
+  application:
+    name: demo-deeplearning-car+face+body
+  jpa:
+      hibernate:
+        ddl-auto: update
+      show-sql: true
+  datasource:
+    druid:
+      #JDBC 配置
+      url: jdbc:mysql://47.98.51.15:3306/aitest?allowMultiQueries=true&useUnicode=true&characterEncoding=UTF-8
+      username: baymin
+      password: baymin1024!@#$%
+      driverClassName: com.mysql.jdbc.Driver
+
+      #连接池配置
+      initial-size: 10
+      max-active: 100
+      min-idle: 10
+      max-wait: 60000
+      pool-prepared-statements: true
+      max-pool-prepared-statement-per-connection-size: 20
+      time-between-eviction-runs-millis: 60000
+      min-evictable-idle-time-millis: 300000
+      validation-query: SELECT 1 FROM DUAL
+      validation-query-timeout: 6000
+      test-while-idle: true
+      test-on-borrow: false
+      test-on-return: false
+      #time-between-eviction-runs-millis:
+      #min-evictable-idle-time-millis
+      #max-evictable-idle-time-millis
+      #filters: #配置多个英文逗号分隔 和下面那个不知道有和冲突
+      stat-view-servlet:
+        enabled: true
+        url-pattern: /druid/*
+      filter:
+        stat:
+          log-slow-sql: true
+          slow-sql-millis: 1000
+          merge-sql: true
+        wall:
+          config:
+            multi-statement-allow: true
+
+      #监控配置
+      # WebStatFilter配置，说明请参考Druid Wiki，配置_配置WebStatFilter
+
+
+
+
