@@ -4,9 +4,11 @@ import pika
 import json
 import time
 import psycopg2
+import numpy as np
 from wxpy import *
 import logging as log
 from retry import retry
+from visdom import Visdom
 from datetime import datetime
 from flask_cors import CORS
 from flask import Flask, request, Response
@@ -61,6 +63,12 @@ class pikaqiu(object):
         self.port = port
         self.username = username
         self.password = password
+        # region 画图参数
+        self.draw = True
+        self.draw_windows = None
+        self.draw_host = 'localhost'
+        self.draw_port = 8097
+        # endregion
         # region 训练队列参数
         self.train_exchange = train_exchange
         self.train_queue = train_queue
@@ -77,10 +85,27 @@ class pikaqiu(object):
         # endregion
         # self.consume()
 
+    def draw_chat(self, data=[{"x": 13.00, "y": 13.33, "win_id": "窗体名称->就是当前容器的id+该图标的含义", "title": "窗体显示的名称"}], debug=False):
+        # record 定义的格式{"x": 13.00, "y": 13.33, "win_id": "窗体名称->就是当前容器的id+该图标的含义", "title": "窗体显示的名称"}
+        if debug:
+            self.draw_windows = Visdom(env="test")
+        for record in data:
+            if self.draw_windows.win_exists(record["win_id"]):
+                print("存在窗口")
+                self.draw_windows.line(
+                    X=np.array([record["x"]]),
+                    Y=np.array([record["y"]]),
+                    win=record["win_id"],
+                    update='append')
+            else:
+                self.draw_windows.line(
+                    win=record["win_id"],
+                    X=np.array([0]),
+                    Y=np.array([0]),
+                    opts=dict(title=record["title"], width=1024, height=520))
     '''
     获取单个解包队列数据
     '''
-
     def get_package_one(self):
         log.info('get_package_one:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         os.system("notify-send '%s' '%s' -t %d" % ('解包', '解包数据', 10000))
@@ -204,12 +229,23 @@ class pikaqiu(object):
                                    train_info["assetsDir"]))
 
                         # region 更新数据库
+                        draw_url = 'http://%s/env/%s' % (self.draw_host, self.draw_port, train_info['projectId'])
                         sql = "UPDATE train_record SET container_id='%s', status=%d, net_framework='%s'," \
-                              " assets_type='%s' where project_id='%s'" % \
+                              " assets_type='%s', draw_url='%s' where project_id='%s'" % \
                               (res, 2, train_info['providerType'],
-                               train_info['assetsType'], train_info['projectId'])
+                               train_info['assetsType'],  draw_url, train_info['projectId'])
                         log.info("训练:" + sql)
                         self.postgres_execute(sql)
+                        # endregion
+
+                        # region 初始化画图visdom
+                        if self.draw:
+                            # 保留画图日志，下次打开可直接加载
+                            draw_log = self.package_base_path + train_info["assetsDir"]+"/draw.log"
+                            self.draw_windows = Visdom(env=train_info['projectId'], log_to_filename=draw_log)
+                            if os.path.exists(draw_log):
+                                print("已经存在直接加载")
+                                self.draw_windows.replay_log(draw_log)
                         # endregion
 
                     elif status == "正在训练":
@@ -269,7 +305,12 @@ class pikaqiu(object):
         return True
 
     @retry(pika.exceptions.AMQPConnectionError, delay=5, jitter=(1, 3))
-    def init(self, sql=True, sql_host='localhost'):
+    def init(self, sql=True, sql_host='localhost', draw=True, draw_host='localhost', draw_port=8097):
+        self.draw = draw
+        self.draw_host = draw_host
+        self.draw_port = draw_port
+        if draw:
+            os.system("nohup visdom -port %d > visdom.log 2>&1 & \echo $! > visdom.pid" % draw_port)
         if sql:
             self.postgres_connect(host=sql_host)
         connection = pika.BlockingConnection(self.parameters)
@@ -303,8 +344,17 @@ class pikaqiu(object):
         # self.get_one(channel)
 
 
+@app.route('/draw_chat', methods=['POST'])
+def draw_chat_http():
+    data = request.json        # 获取 JOSN 数据
+    # data = data.get('obj')     #  以字典形式获取参数
+    if data is not None:
+        ff.draw_chat(data)
+    return Response(json.dumps({"res": "ok"}), mimetype='application/json')
+
+
 @app.route('/train_list', methods=['GET'])
-def main():
+def get_train_list_http():
     num = request.args.get('num', type=int, default=20)
     page = request.args.get('page', type=int, default=0)
     offset = num * page
