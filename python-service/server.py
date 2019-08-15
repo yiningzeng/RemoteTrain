@@ -390,7 +390,9 @@ if __name__ == '__main__':
 
     ff = pikaqiu(root_password='baymin1024', host='192.168.31.75', username='baymin', password='baymin1024',
                  package_base_path='/home/baymin/daily-work/ftp/')
-    ch = ff.init(sql_host='192.168.31.75')
+    # init(self, sql=True, sql_host='localhost', draw=True, draw_host='localhost', draw_port=8097):
+    # sql: 是否开启数据库，sql_host：数据库地址，draw：是否开启画图，draw_host：画图的服务地址，draw_port：画图的服务端口
+    ch = ff.init(sql_host='192.168.31.75', draw_host='192.168.31.157')
 
     # 创建后台执行的 schedulers
     scheduler = BackgroundScheduler()
