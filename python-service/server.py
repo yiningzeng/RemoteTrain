@@ -189,7 +189,7 @@ class pikaqiu(object):
                     self.channel.basic_nack(method_frame.delivery_tag)
                     log.info("等待训练")
                 else:
-                    status = os.popen("cat  %s/%s/train_status.txt | head -n 1" %
+                    status = os.popen("cat %s/%s/train_status.txt | head -n 1" %
                                       (self.package_base_path, train_info["assetsDir"])).read().replace('\n', '')
                     if status == "等待训练":
                         self.channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
