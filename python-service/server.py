@@ -209,11 +209,13 @@ class pikaqiu(object):
                                              -t  docker的gup版本，默认是最新版本2，设置1：nvidia-docker，2：docker run --gpus all
                                              -h  帮助
                         '''
-                        train_cmd = "dockertrain -n %s -v %s -w %s -t 2" % (train_info["assetsDir"],
+                        train_cmd = 'echo "%s" | sudo -S dockertrain -n %s -v %s -w %s -t 2' % (self.root_password,
+                                        train_info["assetsDir"],
                                         self.package_base_path + "/" + train_info["assetsDir"],
                                         self.root_password)
                         if train_info['providerType'] == 'yolov3':
-                            train_cmd = "dockertrain -n %s -v %s -w %s -t 2 -r %s -f %s" % (train_info["assetsDir"],
+                            train_cmd = 'echo "%s" | sudo -S dockertrain -n %s -v %s -w %s -t 2 -r %s -f %s' % (self.root_password,
+                                        train_info["assetsDir"],
                                         self.package_base_path + "/" + train_info["assetsDir"],
                                         self.root_password,
                                         "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v2.1",
