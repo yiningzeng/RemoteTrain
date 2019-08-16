@@ -121,11 +121,12 @@ class pikaqiu(object):
                                                           body.decode('utf-8')))
             package_info = json.loads(body.decode('utf-8'))
             log.info('开始解包')
+            os.system('echo "%s" | sudo -S chmod -R 777 /assets' % self.root_password)
             os.system("tar -xvf %s/%s -C %s" %
                       (self.package_base_path, package_info["packageName"], self.package_base_path))
             os.system("echo 1 > %s/%s/untar.txt" % (self.package_base_path, package_info["packageDir"]))
             os.system("echo 等待训练 > %s/%s/train_status.txt" % (self.package_base_path, package_info["packageDir"]))
-            os.system("rm %s/%s" % (self.package_base_path, package_info["packageName"]))
+            os.system('echo "%s" | sudo -S rm %s/%s' % (self.root_password, self.package_base_path, package_info["packageName"]))
             # region 更新数据库
             # 这里插入前需要判断是否存在相同的项目
             suc, rows = self.postgres_execute("SELECT * FROM train_record WHERE project_id='%s'" %
@@ -176,13 +177,13 @@ class pikaqiu(object):
         else:
             # 这里需要检查训练素材包是否已经解包，如果未解包，这里需要拒绝，让它重新排队self.channel.basic_nack
             train_info = json.loads(body.decode('utf-8'))
-            if not os.path.exists("%s%s/untar.txt" % (self.package_base_path, train_info["assetsDir"])):
+            if not os.path.exists("%s/%s/untar.txt" % (self.package_base_path, train_info["assetsDir"])):
                 log.info('%s 未解包完成' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
                 self.channel.basic_nack(method_frame.delivery_tag)
                 log.info("解包未完成")
             else:
                 # 判断训练状态文件是否存在
-                if not os.path.exists("%s%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"])):
+                if not os.path.exists("%s/%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"])):
                     log.info('%s 等待训练' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
                     os.system("echo '等待训练\c' > %s/%s/train_status.txt" %
                               (self.package_base_path, train_info["assetsDir"]))
@@ -392,7 +393,7 @@ if __name__ == '__main__':
                  package_base_path='/assets')
     # init(self, sql=True, sql_host='localhost', draw=True, draw_host='localhost', draw_port=8097):
     # sql: 是否开启数据库，sql_host：数据库地址，draw：是否开启画图，draw_host：画图的服务地址，draw_port：画图的服务端口
-    ch = ff.init(sql_host='192.168.31.75', draw_host='192.168.31.157')
+    ch = ff.init(sql_host='192.168.31.75', draw_host='192.168.31.75')
 
     # 创建后台执行的 schedulers
     scheduler = BackgroundScheduler()
@@ -411,8 +412,8 @@ if __name__ == '__main__':
     end_date(datetime or str)	结束日期
     timezone(datetime.tzinfo or   str)	时区
     '''
-    scheduler.add_job(ff.get_train_one, 'interval', minutes=30)
-    scheduler.add_job(ff.get_package_one, 'interval', minutes=20)
+    scheduler.add_job(ff.get_train_one, 'interval', minutes=2)
+    scheduler.add_job(ff.get_package_one, 'interval', minutes=1)
     # scheduler.add_job(ff.get_train_one, 'interval', seconds=10)
     # scheduler.add_job(ff.get_package_one, 'interval', seconds=5)
     scheduler.start()
