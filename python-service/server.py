@@ -210,11 +210,11 @@ class pikaqiu(object):
                                              -h  帮助
                         '''
                         train_cmd = "dockertrain -n %s -v %s -w %s -t 2" % (train_info["assetsDir"],
-                                        self.package_base_path + train_info["assetsDir"],
+                                        self.package_base_path + "/" + train_info["assetsDir"],
                                         self.root_password)
                         if train_info['providerType'] == 'yolov3':
                             train_cmd = "dockertrain -n %s -v %s -w %s -t 2 -r %s -f %s" % (train_info["assetsDir"],
-                                        self.package_base_path + train_info["assetsDir"],
+                                        self.package_base_path + "/" + train_info["assetsDir"],
                                         self.root_password,
                                         "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v2.1",
                                         "darknet")
@@ -242,7 +242,7 @@ class pikaqiu(object):
                         # region 初始化画图visdom
                         if self.draw:
                             # 保留画图日志，下次打开可直接加载
-                            draw_log = self.package_base_path + train_info["assetsDir"]+"/draw.log"
+                            draw_log = self.package_base_path + "/" + train_info["assetsDir"]+"/draw.log"
                             self.draw_windows = Visdom(env=train_info['projectId'], log_to_filename=draw_log)
                             if os.path.exists(draw_log):
                                 print("已经存在直接加载")
