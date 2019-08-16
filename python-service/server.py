@@ -24,12 +24,12 @@ CORS(app, resources=r'/*')
 
 
 '''
-usage:  dockertrainD  -p  映射到本地的端口 默认8097 如果被占用会自动分配，只检测端口占用情况，可能存在多个未开启的容器相同端口的情况
+usage:  dockertrain  -p  映射到本地的端口 默认8097 如果被占用会自动分配，只检测端口占用情况，可能存在多个未开启的容器相同端口的情况
                       -n  项目名 默认 ""
                       -v  需要映射的素材目录(必填)
                       -r  docker镜像的地址 默认registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-v3.6
                       -w  root密码 默认icubic-123
-                      -g  复制脚本到/usr/local/bin/，后面执行可以全局dockertrainD
+                      -g  复制脚本到/usr/local/bin/，后面执行可以全局dockertrain
                       -o  日志的输出目录默认/var/log/train
                       -t  docker的gup版本，默认是最新版本2，设置1：nvidia-docker，2：docker run --gpus all
                       -h  帮助
@@ -215,7 +215,7 @@ class pikaqiu(object):
                             train_cmd = "dockertrain -n %s -v %s -w %s -t 2 -r %s -f %s" % (train_info["assetsDir"],
                                         self.package_base_path + train_info["assetsDir"],
                                         self.root_password,
-                                        "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v1.4",
+                                        "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v2.1",
                                         "darknet")
                         log.info("\n\n**************************\n训练的命令: %s\n**************************\n" % train_cmd)
                         res = os.popen(train_cmd).read().replace('\n', '')
@@ -344,7 +344,7 @@ class pikaqiu(object):
         # self.get_one(channel)
 
 
-@app.route('/draw_chat', methods=['POST'])
+@app.route('/draw_chart', methods=['POST'])
 def draw_chat_http():
     data = request.json        # 获取 JOSN 数据
     # data = data.get('obj')     #  以字典形式获取参数
@@ -388,8 +388,8 @@ if __name__ == '__main__':
 
     # channel = connection.channel()
 
-    ff = pikaqiu(root_password='baymin1024', host='192.168.31.75', username='baymin', password='baymin1024',
-                 package_base_path='/home/baymin/daily-work/ftp/')
+    ff = pikaqiu(root_password='icubic-123', host='192.168.31.75', username='baymin', password='baymin1024',
+                 package_base_path='/assets')
     # init(self, sql=True, sql_host='localhost', draw=True, draw_host='localhost', draw_port=8097):
     # sql: 是否开启数据库，sql_host：数据库地址，draw：是否开启画图，draw_host：画图的服务地址，draw_port：画图的服务端口
     ch = ff.init(sql_host='192.168.31.75', draw_host='192.168.31.157')
@@ -421,61 +421,3 @@ if __name__ == '__main__':
     # ff.consume(ch, on_message_callback)
     app.run(host="0.0.0.0", port=18888)
     embed()
-
-    # 声明queue
-    # channel.queue_declare(queue='balance')
-    # n RabbitMQ a message can never be sent directly to the queue, it always needs to go through an exchange.
-
-    # channel.basic_publish(exchange='ai.train.topic',
-    #               routing_key='train.start.test.fast',
-    #               body='{fufuasdaskjdsa: "asdasdasdasds"}')
-    # connection.close()
-
-    # @retry()
-    # def make_trouble():
-    #     print('\nretry')
-    #     '''Retry until succeed'''
-    #
-    #
-
-    # def backcall(ch, method, properties, body):  # 参数body是发送过来的消息。
-    #     print(ch, method, properties)
-    #     print('\n[x] Received %r' % body)
-    #     os.system("notify-send '训练队列' '%s' -t %d" % (body, 100000))
-    #
-    #     # 1.开始训练
-    #     # 2.训练结束后生成done.txt 在目录下
-    #     # 答复此条消息已经处理完成，这里要判断，在目录下有没有done.txt，有的话就回复完成
-    #     # ch.basic_ack(method.delivery_tag)
-    #
-    #
-    # print(channel.basic_get(queue='ai.train.topic-queue', auto_ack=False))
-    #
-    # # bot = Bot(cache_path=True, console_qr=True)
-    # # 创建后台执行的 schedulers
-    # scheduler = BackgroundScheduler()
-    # # 添加调度任务
-    #
-    # # 提醒写日报
-    # # scheduler.add_job(remind, 'cron', second="0/2")
-    # scheduler.add_job(remind, 'interval', seconds=5)
-    # # scheduler.add_job(create_daily, 'cron', second="0", minute="5", hour="1", day_of_week="MON-SUN")
-    # # scheduler.add_job(push_daily, 'cron', second="0", minute="5", hour="19", day_of_week="MON-SUN")
-    # # 调度方法为 timedTask，触发器选择 interval(间隔性)，间隔时长为 2 秒  0 15 10 ? * MON-FRI
-    # # scheduler.add_job(send_daily, 'cron', second="0", minute="30", hour="20", day_of_week="MON-SAT")
-    #
-    # # time.sleep(6)
-    # # print(channel.basic_get(queue='ai.train.topic-queue', auto_ack=False))
-    # # print(channel.basic_get(queue='ai.train.topic-queue', auto_ack=False))
-    # # print(channel.basic_get(queue='ai.train.topic-queue', auto_ack=False))
-    # # print(channel.basic_get(queue='ai.train.topic-queue', auto_ack=False))
-    #
-    # # channel.basic_consume('ai.train.topic-queue', backcall)
-    # # backcall,  # 回调函数。执行结束后立即执行另外一个函数返回给发送端是否执行完毕。
-    # #                   queue=,
-    # # )  # 如果注释掉，对方没有收到消息的话不会将消息丢失，始终在队列里等待下次发送。
-    #
-    # scheduler.start()
-    # # bot.join()
-    # embed()
-    # # channel.start_consuming()  # 启动后进入死循环。一直等待消息。
