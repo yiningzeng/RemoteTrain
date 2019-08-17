@@ -18,3 +18,5 @@ docker-shell/docker-darknet/darknet53\.conv\.74
 python-service/visdom\.pid
 
 docker-shell/darknet-dockerfile/darknet53\.conv\.74
+
+docker-shell/darknet-dockerfile/chart\.png
