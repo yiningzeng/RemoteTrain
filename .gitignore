@@ -16,3 +16,5 @@ web/\.idea/
 docker-shell/docker-darknet/darknet53\.conv\.74
 
 python-service/visdom\.pid
+
+docker-shell/darknet-dockerfile/darknet53\.conv\.74
