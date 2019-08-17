@@ -5,4 +5,4 @@ COPY darknet53.conv.74 /darknet
 COPY start.sh /darknet
 VOLUME /darknet/assets
 EXPOSE 8097
-CMD sh start.sh
+CMD bash start.sh
