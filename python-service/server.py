@@ -222,8 +222,18 @@ class pikaqiu(object):
                                         "darknet")
                         log.info("\n\n**************************\n训练的命令: %s\n**************************\n" % train_cmd)
                         res = os.popen(train_cmd).read().replace('\n', '')
-                        if len(res) != 64:
+                        if "train_done" not in res:
                             log.info("训练有误: %s" % res)
+                            draw_url = 'http://%s/env/%s' % (self.draw_host, self.draw_port, train_info['projectId'])
+                            sql = "UPDATE train_record SET container_id='%s', status=%d, net_framework='%s'," \
+                                  " assets_type='%s', draw_url='%s', image_url='%s' where project_id='%s'" % \
+                                  (res, -1, train_info['providerType'],
+                                   train_info['assetsType'],
+                                   draw_url,
+                                   image_url,
+                                   train_info['projectId'])
+                            log.info("训练:" + sql)
+                            self.postgres_execute(sql)
                             return
                         # 如果res长度==64，那么就是container_id
 

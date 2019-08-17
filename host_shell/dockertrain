@@ -130,3 +130,4 @@ else
 	echo $password | sudo -S nvidia-docker run -d -p $port:8097 -v $volume:$docker_volume --name "$peoject_name$port-$currentTimeStamp" $registry > "$volume/container_id.log" 2>&1
 fi
 cat "$volume/container_id.log"
+echo "train_done"
