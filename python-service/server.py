@@ -192,7 +192,7 @@ class pikaqiu(object):
                 else:
                     status = os.popen("cat %s/%s/train_status.log | head -n 1" %
                                       (self.package_base_path, train_info["assetsDir"])).read().replace('\n', '')
-                    if status == "等待训练":
+                    if "等待训练" in status:
                         self.channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
 
                         '''
@@ -284,11 +284,11 @@ class pikaqiu(object):
                                 self.draw_windows.replay_log(draw_log)
                         # endregion
 
-                    elif status == "正在训练":
+                    elif "正在训练" in status:
                         self.channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
-                    elif status == "训练失败":
+                    elif "训练失败" in status:
                         self.channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
-                    elif status == "训练完成":
+                    elif "训练完成" in status:
                         # region 更新数据库
                         # os.system("echo '训练完成\c' > %s/%s/train_status.log" % (self.package_base_path,
                         #                                                       train_info["assetsDir"]))
