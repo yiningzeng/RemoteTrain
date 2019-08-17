@@ -91,7 +91,6 @@ class pikaqiu(object):
             self.draw_windows = Visdom(env="test")
         for record in data:
             if self.draw_windows.win_exists(record["win_id"]):
-                print("存在窗口")
                 self.draw_windows.line(
                     X=np.array([record["x"]]),
                     Y=np.array([record["y"]]),
