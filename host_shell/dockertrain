@@ -21,7 +21,7 @@ usage:  dockertrain  -p  映射到本地的端口 默认8097 如果被占用会�
                      -v  需要映射的素材目录(必填)
                      -d  如果-f选择other那么-d必填，就是-v映射的容器内的目录
                      -r  docker镜像的地址 默认registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-auto-v3.6
-                     -f  训练使用的网络默认detectron,可选darknet和other
+                     -f  训练使用的网络默认detectron,可选yolov3和fasterRcnn和maskRcnn和other
                      -w  root密码 默认icubic-123
                      -g  复制脚本到/usr/local/bin/，后面执行可以全局dockertrainD
                      -o  日志的输出目录默认/var/log/train
@@ -101,9 +101,11 @@ if [ "$net_framework" == 'other' ];then
     echo "选其他框架，-d必填"
     exit 1
   fi
-elif [ "$net_framework" == 'detectron' ]; then
+elif [ "$net_framework" == 'fasterRcnn' ]; then
   docker_volume="/Detectron/detectron/datasets/data"
-elif [ "$net_framework" == 'darknet' ]; then
+elif [ "$net_framework" == 'maskRcnn' ]; then
+  docker_volume="/Detectron/detectron/datasets/data"
+elif [ "$net_framework" == 'yolov3' ]; then
   docker_volume="/darknet/assets"
 fi
 
@@ -122,12 +124,12 @@ log "******************************"
 
 current=`date "+%Y-%m-%d %H:%M:%S"`
 timeStamp=`date -d "$current" +%s`
-currentTimeStamp=$((timeStamp*1000+`date "+%N"`/1000000))
+currentTimeStamp=$((timeStamp+`date "+%N"`/10))
 
 if [ $docker_type -eq 2 ];then
-	echo $password | sudo -S docker run --gpus all -d -p $port:8097 -v $volume:$docker_volume --name "$peoject_name$port-$currentTimeStamp" $registry > "$volume/container_id.log" 2>&1
+	echo $password | sudo -S docker run --rm --gpus all -d -p $port:8097 -v $volume:$docker_volume --name "$peoject_name$port-$currentTimeStamp" $registry > "$volume/container_id.log" 2>&1
 else
-	echo $password | sudo -S nvidia-docker run -d -p $port:8097 -v $volume:$docker_volume --name "$peoject_name$port-$currentTimeStamp" $registry > "$volume/container_id.log" 2>&1
+	echo $password | sudo -S nvidia-docker run --rm -d -p $port:8097 -v $volume:$docker_volume --name "$peoject_name$port-$currentTimeStamp" $registry > "$volume/container_id.log" 2>&1
 fi
 cat "$volume/container_id.log"
 echo "train_done"
