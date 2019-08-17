@@ -125,6 +125,7 @@ class pikaqiu(object):
             os.system("tar -xvf %s/%s -C %s" %
                       (self.package_base_path, package_info["packageName"], self.package_base_path))
             os.system("echo 1 > %s/%s/untar.log" % (self.package_base_path, package_info["packageDir"]))
+            os.system('echo "%s\c" > %s/%s/project_id.log' % (package_info['projectId'], self.package_base_path, package_info["packageDir"]))
             os.system("echo 等待训练 > %s/%s/train_status.log" % (self.package_base_path, package_info["packageDir"]))
             os.system('echo "%s" | sudo -S rm %s/%s' % (self.root_password, self.package_base_path, package_info["packageName"]))
             # region 更新数据库
@@ -209,18 +210,35 @@ class pikaqiu(object):
                                              -t  docker的gup版本，默认是最新版本2，设置1：nvidia-docker，2：docker run --gpus all
                                              -h  帮助
                         '''
-                        train_cmd = 'echo "%s" | sudo -S dockertrain -n %s -v %s -w %s -t 2' % (self.root_password,
-                                        train_info["assetsDir"],
-                                        self.package_base_path + "/" + train_info["assetsDir"],
-                                        self.root_password)
+                        # 增加镜像地址进数据库，并且镜像地址外部(队列里的数据)传入
+                        image_url = None
+                        docker_volume = None
                         if train_info['providerType'] == 'yolov3':
-                            train_cmd = 'echo "%s" | sudo -S dockertrain -n %s -v %s -w %s -t 2 -r %s -f %s' % (self.root_password,
-                                        train_info["assetsDir"],
+                            image_url = train_info['providerOptions']['yolov3Image']
+                            docker_volume = "/Detectron/detectron/datasets/data"
+                        elif train_info['providerType'] == 'fasterRcnn':
+                            image_url = train_info['providerOptions']['fasterRcnnImage']
+                            docker_volume = "/Detectron/detectron/datasets/data"
+                        elif train_info['providerType'] == 'maskRcnn':
+                            image_url = train_info['providerOptions']['maskRcnnImage']
+                            docker_volume = "/darknet/assets"
+                        elif train_info['providerType'] == 'other':
+                            image_url = train_info['providerOptions']['otherImage']
+                            docker_volume = train_info['providerOptions']['docker_volume']
+                        train_cmd = 'dockertrain -n %s -v %s -w %s -t 2 -r %s -f %s -d %s' % \
+                                    (train_info["projectName"] + "_" + train_info["projectId"],
                                         self.package_base_path + "/" + train_info["assetsDir"],
                                         self.root_password,
-                                        "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v2.3",
-                                        "darknet")
+                                        image_url,
+                                        train_info['providerType'],
+                                        docker_volume)
                         log.info("\n\n**************************\n训练的命令: %s\n**************************\n" % train_cmd)
+
+                        if image_url is None or docker_volume is None:
+                            log.info(
+                                "\n\n**************************\n镜像地址和映射的容器内目录不可为空\n**************************\n")
+                            return
+
                         res = os.popen(train_cmd).read().replace('\n', '')
                         if "train_done" not in res:
                             log.info("训练有误: %s" % res)
@@ -247,9 +265,12 @@ class pikaqiu(object):
                         # region 更新数据库
                         draw_url = 'http://%s/env/%s' % (self.draw_host, self.draw_port, train_info['projectId'])
                         sql = "UPDATE train_record SET container_id='%s', status=%d, net_framework='%s'," \
-                              " assets_type='%s', draw_url='%s' where project_id='%s'" % \
+                              " assets_type='%s', draw_url='%s', image_url='%s' where project_id='%s'" % \
                               (res, 2, train_info['providerType'],
-                               train_info['assetsType'],  draw_url, train_info['projectId'])
+                               train_info['assetsType'],
+                               draw_url,
+                               image_url,
+                               train_info['projectId'])
                         log.info("训练:" + sql)
                         self.postgres_execute(sql)
                         # endregion
