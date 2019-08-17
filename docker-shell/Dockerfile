@@ -1,7 +1,6 @@
-FROM registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_ai-power-v1.3
+FROM registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v2.0
 WORKDIR /darknet
-COPY docker-darknet /darknet
-RUN ls /darknet
+COPY voc2DarknetAssets-python2.py /darknet
 VOLUME /darknet/assets
-RUN pip install kmeans
+EXPOSE 8097
 CMD sh start.sh

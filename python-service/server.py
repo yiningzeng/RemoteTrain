@@ -124,8 +124,8 @@ class pikaqiu(object):
             os.system('echo "%s" | sudo -S chmod -R 777 /assets' % self.root_password)
             os.system("tar -xvf %s/%s -C %s" %
                       (self.package_base_path, package_info["packageName"], self.package_base_path))
-            os.system("echo 1 > %s/%s/untar.txt" % (self.package_base_path, package_info["packageDir"]))
-            os.system("echo 等待训练 > %s/%s/train_status.txt" % (self.package_base_path, package_info["packageDir"]))
+            os.system("echo 1 > %s/%s/untar.log" % (self.package_base_path, package_info["packageDir"]))
+            os.system("echo 等待训练 > %s/%s/train_status.log" % (self.package_base_path, package_info["packageDir"]))
             os.system('echo "%s" | sudo -S rm %s/%s' % (self.root_password, self.package_base_path, package_info["packageName"]))
             # region 更新数据库
             # 这里插入前需要判断是否存在相同的项目
@@ -177,26 +177,26 @@ class pikaqiu(object):
         else:
             # 这里需要检查训练素材包是否已经解包，如果未解包，这里需要拒绝，让它重新排队self.channel.basic_nack
             train_info = json.loads(body.decode('utf-8'))
-            if not os.path.exists("%s/%s/untar.txt" % (self.package_base_path, train_info["assetsDir"])):
+            if not os.path.exists("%s/%s/untar.log" % (self.package_base_path, train_info["assetsDir"])):
                 log.info('%s 未解包完成' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
                 self.channel.basic_nack(method_frame.delivery_tag)
                 log.info("解包未完成")
             else:
                 # 判断训练状态文件是否存在
-                if not os.path.exists("%s/%s/train_status.txt" % (self.package_base_path, train_info["assetsDir"])):
+                if not os.path.exists("%s/%s/train_status.log" % (self.package_base_path, train_info["assetsDir"])):
                     log.info('%s 等待训练' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-                    os.system("echo '等待训练\c' > %s/%s/train_status.txt" %
+                    os.system("echo '等待训练\c' > %s/%s/train_status.log" %
                               (self.package_base_path, train_info["assetsDir"]))
                     self.channel.basic_nack(method_frame.delivery_tag)
                     log.info("等待训练")
                 else:
-                    status = os.popen("cat %s/%s/train_status.txt | head -n 1" %
+                    status = os.popen("cat %s/%s/train_status.log | head -n 1" %
                                       (self.package_base_path, train_info["assetsDir"])).read().replace('\n', '')
                     if status == "等待训练":
                         self.channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
 
                         '''
-                        执行后会在 -v 目录下生成 容器的id container_id.txt
+                        执行后会在 -v 目录下生成 容器的id container_id.log
                         usage:  dockertrain  -p  映射到本地的端口 默认8097 如果被占用会自动分配，只检测端口占用情况，可能存在多个未开启的容器相同端口的情况
                                              -n  项目名 默认 ""
                                              -v  需要映射的素材目录(必填)
@@ -218,7 +218,7 @@ class pikaqiu(object):
                                         train_info["assetsDir"],
                                         self.package_base_path + "/" + train_info["assetsDir"],
                                         self.root_password,
-                                        "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v2.1",
+                                        "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v2.3",
                                         "darknet")
                         log.info("\n\n**************************\n训练的命令: %s\n**************************\n" % train_cmd)
                         res = os.popen(train_cmd).read().replace('\n', '')
@@ -227,7 +227,7 @@ class pikaqiu(object):
                             return
                         # 如果res长度==64，那么就是container_id
 
-                        os.system("echo '正在训练\c' > %s/%s/train_status.txt" %
+                        os.system("echo '正在训练\c' > %s/%s/train_status.log" %
                                   (self.package_base_path,
                                    train_info["assetsDir"]))
 
@@ -255,7 +255,7 @@ class pikaqiu(object):
                         self.channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
                     elif status == "训练完成":
                         # region 更新数据库
-                        # os.system("echo '训练完成\c' > %s/%s/train_status.txt" % (self.package_base_path,
+                        # os.system("echo '训练完成\c' > %s/%s/train_status.log" % (self.package_base_path,
                         #                                                       train_info["assetsDir"]))
                         self.postgres_execute(
                             "UPDATE train_record SET status=%d"
@@ -384,7 +384,7 @@ def get_train_list_http():
 
 if __name__ == '__main__':
     # id = os.popen(
-    #     'cat /home/baymin/daily-work/ftp/train-assets-cizhuan-fasterRcnn-20190808/container_id.txt | head -n 1')
+    #     'cat /home/baymin/daily-work/ftp/train-assets-cizhuan-fasterRcnn-20190808/container_id.log | head -n 1')
     # .read().replace('\n', '')
     #
     # print(id)
