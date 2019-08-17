@@ -234,6 +234,9 @@ class pikaqiu(object):
                                    train_info['projectId'])
                             log.info("训练:" + sql)
                             self.postgres_execute(sql)
+                            os.system("echo '训练失败\c' > %s/%s/train_status.log" %
+                                      (self.package_base_path,
+                                       train_info["assetsDir"]))
                             return
                         # 如果res长度==64，那么就是container_id
 
@@ -263,6 +266,8 @@ class pikaqiu(object):
 
                     elif status == "正在训练":
                         self.channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
+                    elif status == "训练失败":
+                        self.channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
                     elif status == "训练完成":
                         # region 更新数据库
                         # os.system("echo '训练完成\c' > %s/%s/train_status.log" % (self.package_base_path,
