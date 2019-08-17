@@ -242,7 +242,7 @@ class pikaqiu(object):
                         res = os.popen(train_cmd).read().replace('\n', '')
                         if "train_done" not in res:
                             log.info("训练有误: %s" % res)
-                            draw_url = 'http://%s/env/%s' % (self.draw_host + ":" + self.draw_port, train_info['projectId'])
+                            draw_url = 'http://%s:%d/env/%s' % (self.draw_host, self.draw_port, train_info['projectId'])
                             sql = "UPDATE train_record SET container_id='%s', status=%d, net_framework='%s'," \
                                   " assets_type='%s', draw_url='%s', image_url='%s' where project_id='%s'" % \
                                   (res, -1, train_info['providerType'],
@@ -263,7 +263,7 @@ class pikaqiu(object):
                                    train_info["assetsDir"]))
 
                         # region 更新数据库
-                        draw_url = 'http://%s/env/%s' % (self.draw_host + ":" + self.draw_port, train_info['projectId'])
+                        draw_url = 'http://%s:%d/env/%s' % (self.draw_host, self.draw_port, train_info['projectId'])
                         sql = "UPDATE train_record SET container_id='%s', status=%d, net_framework='%s'," \
                               " assets_type='%s', draw_url='%s', image_url='%s' where project_id='%s'" % \
                               (res, 2, train_info['providerType'],
