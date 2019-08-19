@@ -35,7 +35,7 @@ def parse_args():
         '--size',
         dest='size',
         help='图片的尺寸',
-        default=416,
+        default=608,
         type=int
     )
     parser.add_argument(
@@ -157,6 +157,7 @@ if __name__ == '__main__':
     os.system("rm %s/*.txt" % args.voc_dir)
     val_count = int(os.popen("ls -l %s|grep _val.txt|wc -l" % args.voc_dir).read().replace('\n', ''))
     set_files = glob.glob(args.voc_dir+'/ImageSets/Main/*.txt')
+
     for num, set in enumerate(set_files):
         fname, fename = os.path.splitext(os.path.split(set)[1])
         if val_count > 0:
@@ -169,24 +170,42 @@ if __name__ == '__main__':
             os.system("echo %s >> %s/voc.names" % (fname, args.voc_dir))
         sets.append(('2012', fname))
 
+    print("\n########################################\n")
+    all_lose = 0
     for year, image_set in sets:
         if not os.path.exists('%s/labels/' % args.voc_dir):
             os.makedirs('%s/labels/' % args.voc_dir)
         image_ids = open('%s/ImageSets/Main/%s.txt' % (args.voc_dir, image_set)).read().strip().split()
         list_file = open('%s/%s_%s.txt' % (args.voc_dir, year, image_set), 'w')
+        label_num = 0
+        lose = 0
         for image_id in image_ids:
             filename = os.path.splitext(image_id)[0]
-            if filename == '1' or filename == '-1':
+            if filename == '1':
+                label_num = label_num + 1
                 continue
-            print(image_id)
+            if filename == '-1':
+                continue
+            if not os.path.exists('%s/Annotations/%s.xml' % (args.voc_dir, filename)):
+                # print("%s.xml丢失" % filename)
+                lose = lose + 1
+                continue
+            if not os.path.exists('%s/JPEGImages/%s.image_id' % (args.voc_dir, filename)):
+                # print("%s.xml丢失" % filename)
+                lose = lose + 1
+                continue
+            # print(image_id)
             if args.change_ext and ".jpg" not in image_id:
-                print(" convert to jpg")
+                # print(" convert to jpg")
                 im = Image.open('%s/JPEGImages/%s' % (args.voc_dir, image_id))
                 im.save('%s/JPEGImages/%s.jpg' % (args.voc_dir, filename))
             list_file.write('%s/JPEGImages/%s.jpg\n' % (args.voc_dir, filename))
             convert_annotation(args.voc_dir, filename)
+        all_lose = all_lose + lose
+        print("label name: %s, num: %d, lose: %d\n" % (image_set, label_num, lose))
         list_file.close()
-
+    print("########################################\n")
+    print("all label num: %d, lose: %d\n########################################" % (len(classes), all_lose))
     if val_count > 0:
         os.system("cat %s/*_train.txt > %s/train.txt" % (args.voc_dir, args.voc_dir))
         os.system("cat %s/*_val.txt > %s/val.txt" % (args.voc_dir, args.voc_dir))
@@ -195,27 +214,27 @@ if __name__ == '__main__':
         os.system("cat %s/*_*.txt > %s/val.txt" % (args.voc_dir, args.voc_dir))
 
     # 写入voc.data
-    os.system("echo classes = %d >> %s/voc.data" % (len(classes), args.voc_dir))
-    os.system("echo train = %s/train.txt >> %s/voc.data" % (args.voc_dir, args.voc_dir))
-    os.system("echo valid = %s/val.txt >> %s/voc.data" % (args.voc_dir, args.voc_dir))
-    os.system("echo names = %s/voc.names >> %s/voc.data" % (args.voc_dir, args.voc_dir))
-    os.system("echo backup = %s/backup >> %s/voc.data" % (args.voc_dir, args.voc_dir))
+    os.system("echo 'classes = %d' >> '%s/voc.data'" % (len(classes), args.voc_dir))
+    os.system("echo 'train = %s/train.txt' >> '%s/voc.data'" % (args.voc_dir, args.voc_dir))
+    os.system("echo 'valid = %s/val.txt' >> '%s/voc.data'" % (args.voc_dir, args.voc_dir))
+    os.system("echo 'names = %s/voc.names' >> '%s/voc.data'" % (args.voc_dir, args.voc_dir))
+    os.system("echo 'backup = %s/backup' >> '%s/voc.data'" % (args.voc_dir, args.voc_dir))
     # 新增2个参数，为了画图，为了...? 为了爱
-    os.system("echo draw_url = %s >> %s/voc.data" % ("http://192.168.31.75:18888/draw_chart", args.voc_dir))
-    os.system('echo "project_id = \c" >> %s/voc.data' % args.voc_dir)
-    os.system('cat %s/project_id.log >> %s/voc.data' % (args.voc_dir, args.voc_dir))
+    os.system("echo 'draw_url = %s' >> '%s/voc.data'" % ("http://192.168.31.75:18888/draw_chart", args.voc_dir))
+    os.system('echo "project_id = \c" >> "%s/voc.data"' % args.voc_dir)
+    os.system("cat '%s/project_id.log' >> '%s/voc.data'" % (args.voc_dir, args.voc_dir))
     # * draw_url=http://192.168.31.75:18888/draw_chart
     # * project_id=项目名称
-    os.system("mkdir -p %s/backup" % args.voc_dir)
+    os.system("mkdir -p '%s/backup'" % args.voc_dir)
 
     # 更改配置文件信息
-    os.system('sed -i "s/@classes@/%d/g" %s/yolov3-voc.cfg' % (len(classes), args.voc_dir))
-    os.system('sed -i "s/@filters@/%d/g" %s/yolov3-voc.cfg' % ((len(classes) + 5) * 3, args.voc_dir))
-    os.system('/darknet/darknet detector calc_anchors %s/voc.data -num_of_clusters %d -width %d -height %d '
-              '\echo $! > %s/get_anchors_pid.log' % (
+    os.system('sed -i "s/@classes@/%d/g" "%s/yolov3-voc.cfg"' % (len(classes), args.voc_dir))
+    os.system('sed -i "s/@filters@/%d/g" "%s/yolov3-voc.cfg"' % ((len(classes) + 5) * 3, args.voc_dir))
+    os.system('/darknet/darknet detector calc_anchors "%s/voc.data" -num_of_clusters %d -width %d -height %d '
+              '\echo $! > "%s/get_anchors_pid.log"' % (
         args.voc_dir, args.clusters, args.size, args.size, args.voc_dir))
     anchors = os.popen('cat /darknet/anchors.txt').read().replace('\n', '')
-    os.system('sed -i "s/@anchors@/%s/g" %s/yolov3-voc.cfg' % (anchors, args.voc_dir))
+    os.system('sed -i "s/@anchors@/%s/g" "%s/yolov3-voc.cfg"' % (anchors, args.voc_dir))
     print("\nAnchors: {}".format(anchors))
     print("done")
     # 更改聚类信息

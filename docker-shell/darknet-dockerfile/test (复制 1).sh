@@ -6,4 +6,5 @@ if [ $ok == 0 ];then
 	echo "正常退出"
 else
 	echo "break"
+	  echo '训练完成 \c' > train_status.log
 fi

@@ -90,6 +90,18 @@ class pikaqiu(object):
         if debug:
             self.draw_windows = Visdom(env="test")
         for record in data:
+            if self.draw_windows is None:
+                temp = record["win_id"]
+                pos = temp.rfind("-")
+                project_id = temp[:pos]
+                print(project_id)  # "C:/Python27/1"
+                a, rows = ff.postgres_execute(
+                    "SELECT project_id, assets_directory_base, assets_directory_name"
+                    " FROM train_record WHERE project_id='%s'" % project_id, True)
+                if rows is not None or len(rows) > 0:
+                    assets_directory_name = rows[0][2]
+                    draw_log = self.package_base_path + "/" + assets_directory_name + "/draw.log"
+                    self.draw_windows = Visdom(env=project_id, log_to_filename=draw_log)
             if self.draw_windows.win_exists(record["win_id"]):
                 self.draw_windows.line(
                     X=np.array([record["x"]]),
@@ -453,8 +465,8 @@ if __name__ == '__main__':
     end_date(datetime or str)	结束日期
     timezone(datetime.tzinfo or   str)	时区
     '''
-    scheduler.add_job(ff.get_train_one, 'interval', minutes=5)
-    scheduler.add_job(ff.get_package_one, 'interval', minutes=1)
+    # scheduler.add_job(ff.get_train_one, 'interval', minutes=5)
+    # scheduler.add_job(ff.get_package_one, 'interval', minutes=1)
     # scheduler.add_job(ff.get_train_one, 'interval', seconds=10)
     # scheduler.add_job(ff.get_package_one, 'interval', seconds=5)
     scheduler.start()
