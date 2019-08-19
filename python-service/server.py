@@ -121,12 +121,12 @@ class pikaqiu(object):
             package_info = json.loads(body.decode('utf-8'))
             log.info('开始解包')
             os.system('echo "%s" | sudo -S chmod -R 777 /assets' % self.root_password)
-            os.system("tar -xvf %s/%s -C %s" %
+            os.system("tar -xvf '%s/%s' -C '%s'" %
                       (self.package_base_path, package_info["packageName"], self.package_base_path))
-            os.system("echo 1 > %s/%s/untar.log" % (self.package_base_path, package_info["packageDir"]))
-            os.system('echo "%s\c" > %s/%s/project_id.log' % (package_info['projectId'], self.package_base_path, package_info["packageDir"]))
-            os.system("echo 等待训练 > %s/%s/train_status.log" % (self.package_base_path, package_info["packageDir"]))
-            os.system('echo "%s" | sudo -S rm %s/%s' % (self.root_password, self.package_base_path, package_info["packageName"]))
+            os.system("echo 1 > '%s/%s/untar.log'" % (self.package_base_path, package_info["packageDir"]))
+            os.system("echo '%s\c' > '%s/%s/project_id.log'" % (package_info['projectId'], self.package_base_path, package_info["packageDir"]))
+            os.system("echo 等待训练 > '%s/%s/train_status.log'" % (self.package_base_path, package_info["packageDir"]))
+            os.system("echo '%s' | sudo -S rm '%s/%s'" % (self.root_password, self.package_base_path, package_info["packageName"]))
             # region 更新数据库
             # 这里插入前需要判断是否存在相同的项目
             suc, rows = self.postgres_execute("SELECT * FROM train_record WHERE project_id='%s'" %
@@ -185,12 +185,12 @@ class pikaqiu(object):
                 # 判断训练状态文件是否存在
                 if not os.path.exists("%s/%s/train_status.log" % (self.package_base_path, train_info["assetsDir"])):
                     log.info('%s 等待训练' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-                    os.system("echo '等待训练\c' > %s/%s/train_status.log" %
+                    os.system("echo '等待训练\c' > '%s/%s/train_status.log'" %
                               (self.package_base_path, train_info["assetsDir"]))
                     self.channel.basic_nack(method_frame.delivery_tag)
                     log.info("等待训练")
                 else:
-                    status = os.popen("cat %s/%s/train_status.log | head -n 1" %
+                    status = os.popen("cat '%s/%s/train_status.log' | head -n 1" %
                                       (self.package_base_path, train_info["assetsDir"])).read().replace('\n', '')
                     if "等待训练" in status:
                         self.channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
@@ -224,7 +224,7 @@ class pikaqiu(object):
                         elif train_info['providerType'] == 'other':
                             image_url = train_info['providerOptions']['otherImage']
                             docker_volume = train_info['providerOptions']['docker_volume']
-                        train_cmd = 'dockertrain -n %s -v %s -w %s -t 2 -r %s -f %s -d %s' % \
+                        train_cmd = "dockertrain -n '%s' -v '%s' -w '%s' -t 2 -r '%s' -f '%s' -d '%s'" % \
                                     (train_info["projectName"] + "_" + train_info["projectId"],
                                         self.package_base_path + "/" + train_info["assetsDir"],
                                         self.root_password,
@@ -251,13 +251,13 @@ class pikaqiu(object):
                                    train_info['projectId'])
                             log.info("训练:" + sql)
                             self.postgres_execute(sql)
-                            os.system("echo '训练失败\c' > %s/%s/train_status.log" %
+                            os.system("echo '训练失败\c' > '%s/%s/train_status.log'" %
                                       (self.package_base_path,
                                        train_info["assetsDir"]))
                             return
                         # 如果res长度==64，那么就是container_id
 
-                        os.system("echo '正在训练\c' > %s/%s/train_status.log" %
+                        os.system("echo '正在训练\c' > '%s/%s/train_status.log'" %
                                   (self.package_base_path,
                                    train_info["assetsDir"]))
 
@@ -398,7 +398,10 @@ def get_train_list_http():
     offset = num * page
     ret_json = {"num": num, "page": page, "total": 0, "list": []}
     i, count = ff.postgres_execute("SELECT COUNT(*) FROM train_record", True)
-    ret_json["total"] = count[0][0]
+    if count is None:
+        ret_json["total"] = 0
+    else:
+        ret_json["total"] = count[0][0]
     a, rows = ff.postgres_execute(
         "SELECT id, project_id, container_id, project_name, status,"
         " net_framework, assets_type, assets_directory_base, assets_directory_name,"
@@ -450,7 +453,7 @@ if __name__ == '__main__':
     end_date(datetime or str)	结束日期
     timezone(datetime.tzinfo or   str)	时区
     '''
-    scheduler.add_job(ff.get_train_one, 'interval', minutes=2)
+    scheduler.add_job(ff.get_train_one, 'interval', minutes=5)
     scheduler.add_job(ff.get_package_one, 'interval', minutes=1)
     # scheduler.add_job(ff.get_train_one, 'interval', seconds=10)
     # scheduler.add_job(ff.get_package_one, 'interval', seconds=5)
