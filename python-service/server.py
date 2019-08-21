@@ -100,20 +100,24 @@ class pikaqiu(object):
                     " FROM train_record WHERE project_id='%s'" % project_id, True)
                 if rows is not None or len(rows) > 0:
                     assets_directory_name = rows[0][2]
-                    draw_log = self.package_base_path + "/" + assets_directory_name + "/draw.log"
-                    self.draw_windows = Visdom(env=project_id, log_to_filename=draw_log)
+                    if debug:
+                        self.draw_windows = Visdom(env=project_id)
+                    else:
+                        draw_log = self.package_base_path + "/" + assets_directory_name + "/draw.log"
+                        self.draw_windows = Visdom(env=project_id, log_to_filename=draw_log)
             if self.draw_windows.win_exists(record["win_id"]):
                 self.draw_windows.line(
                     X=np.array([record["x"]]),
                     Y=np.array([record["y"]]),
                     win=record["win_id"],
+                    opts=dict(title=record["title"], width=600, height=380),
                     update='append')
             else:
                 self.draw_windows.line(
                     win=record["win_id"],
                     X=np.array([0]),
                     Y=np.array([0]),
-                    opts=dict(title=record["title"], width=1024, height=520))
+                    opts=dict(title=record["title"], width=600, height=380))
     '''
     获取单个解包队列数据
     '''
@@ -392,6 +396,33 @@ class pikaqiu(object):
             # endregion
         return channel
         # self.get_one(channel)
+
+
+@app.route('/train', methods=['POST'])
+def do_train_http():
+    data = request.json        # 获取 JOSN 数据
+    # data = data.get('obj')     #  以字典形式获取参数
+    if data is not None:
+        # const
+        # trainInfo = {
+        #     projectId: project.id,
+        #     projectName: project.name,
+        #     assetsDir: tarBaseName,
+        #     assetsType: project.exportFormat.providerType,
+        #     ...project.trainFormat,
+        # };
+        # {"projectId":"","projectName":"","assetsDir":"素材目录","assetsType":"pascalVOC","ip":"","providerOptions":{"yolov3Image":"registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v3.6","yolov3net":{"angle":360,"batch":64,"burn_in":1000,"channels":3,"decay":0.0005,"exposure":1.5,"gpu_numb":6,"height":608,"hue":0.1,"learning_rate":0.001,"max_batches":50000,"saturation":1.5,"subdivisions":32,"width":608}},"providerType":"yolov3"}
+        package_info = {"projectId": data["projectId"], "projectName": data["projectName"], "packageDir": data["packageDir"], "packageName": data["packageName"]}
+        trainInfo = {"projectId": data["projectId"],
+                     "projectName": data["projectName"],
+                     "assetsDir": data["assetsDir"],
+                     "assetsType": data["assetsType"],
+                     "providerType": data["providerType"],
+                     "providerOptions": {"yolov3Image": data["image"]}
+                     }
+        ff.channel.basic_publish('ai.train.topic', "package.upload-done.%s" % data['projectName'], package_info)
+        ff.channel.basic_publish('ai.train.topic', "train.start.%s" % data['projectName'], trainInfo)
+    return Response(json.dumps({"res": "ok"}), mimetype='application/json')
 
 
 @app.route('/draw_chart', methods=['POST'])
