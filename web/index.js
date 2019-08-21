@@ -1,13 +1,16 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
+import Iframe from 'react-iframe';
+
 import dva, { connect } from 'dva';
-import { Tag, Row, Col, Table, message, Divider, Icon,Spin ,Button,Select, Switch} from 'antd';
+import { Tag, Row, Col, Table, message, PageHeader, Button, Typography, Drawer, Divider, Icon, Card , Select, Switch, Form, Input, DatePicker} from 'antd';
 // 由于 antd 组件的默认文案是英文，所以需要修改为中文
 import zhCN from 'antd/lib/locale-provider/zh_CN';
 import moment from 'moment';
 import 'moment/locale/zh-cn';
-import { getList } from './services/api';
-
+import { getList, doTrain } from './services/api';
+const { Title, Paragraph, Text } = Typography;
+const { Option } = Select;
 moment.locale('zh-cn');
 
 class FreeFish extends React.Component {
@@ -15,6 +18,27 @@ class FreeFish extends React.Component {
         selectedRowKeys: [], // Check here to configure the default column
         pagination: {defaultPageSize:50},
         loading: false,
+        leftVisible: false,
+        rightVisible: false,
+        /*
+        *  package_info = {"projectId": data["projectId"], "projectName": data["projectName"], "packageDir": data["packageDir"], "packageName": data["packageName"]}
+        trainInfo = {"projectId": data["projectId"],
+                     "projectName": data["projectName"],
+                     "assetsDir": data["assetsDir"],
+                     "assetsType": data["assetsType"],
+                     "providerType": data["providerType"],
+                     "providerOptions": {"yolov3Image": data["image"]}
+                     }*/
+        doTrain:{
+            projectId: undefined, // 项目id
+            projectName: undefined, // 项目名称
+            packageDir: undefined, // tar压缩包里面文件夹的目录名
+            packageName: undefined, //tar包的名称
+            assetsDir: undefined, // 素材文件夹，和packageDir相同
+            assetsType: "pascalVoc", // 素材的类型，pascalVoc和coco和other
+            providerType: "yolov3", // 框架的类型yolov3 fasterRcnn maskRcnn
+            image: "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v3.6", // 镜像路径
+        },
     };
 
     onSelectChange = (selectedRowKeys) => {
@@ -73,6 +97,20 @@ class FreeFish extends React.Component {
             },
         });
     };
+
+    showLeftDrawer = () => {
+        this.setState({
+            leftVisible: true,
+        });
+    };
+
+    hideLeftDrawer = () => {
+        this.setState({
+            leftVisible: false,
+        });
+    };
+
+
 
     render() {
         const {
@@ -174,33 +212,271 @@ class FreeFish extends React.Component {
             }],
             onSelection: this.onSelection,
         };
+        const Description = ({ term, children, span = 12 }) => (
+            <Col span={span}>
+                <div className="description">
+                    <div className="term">{term}</div>
+                    <div className="detail">{children}</div>
+                </div>
+            </Col>
+        );
+
+        const content = (
+            <Row>
+                <Description term="服务管理">
+                    <a href="http://192.168.31.75" target="view_window">http://192.168.31.75</a>
+                    <br/>
+                    <a href="http://ai.qtingvision.com:888" target="view_window">http://ai.qtingvision.com:888</a>
+                </Description>
+                <Description term="画图服务">
+                    <a href="http://192.168.31.75:8097" target="view_window">http://192.168.31.75:8097</a>
+                    <br/>
+                    <a href="http://draw.qtingvision.com:888" target="view_window">http://draw.qtingvision.com:888</a>
+                </Description>
+                <Description term="队列服务">
+                    <a href="http://192.168.31.75:15672" target="view_window">http://192.168.31.75:15672</a>
+                    <br/>
+                    <a href="http://queue.qtingvision.com:888" target="view_window">http://queue.qtingvision.com:888</a>
+                </Description>
+                <Description term="ftp服务">
+                    <a href="ftp://192.168.31.75:21/" target="view_window">ftp://192.168.31.75/</a>
+                </Description>
+                {/*<Description term="Remarks" span={24}>*/}
+                    {/*我是数艘模式打开的年四季度拉上你的空间按时刻把数据库但是当你什么的女生看*/}
+                {/*</Description>*/}
+            </Row>
+        );
+
+        const extraContent = (
+            <Row>
+                <Button type="danger" size="large" onClick={this.showLeftDrawer}>
+                   使用前看我
+                </Button>
+            </Row>
+        );
         return (
-            <Table size={"small"} rowSelection={rowSelection} columns={columns} dataSource={list} onChange={this.handleTableChange}
-                   expandedRowRender={record => {
-                       return(
-                           <Row style={{marginLeft: 50}}>
-                               <Row>
-                                   <Switch style={{marginTop: -3}} checkedChildren="插队开" unCheckedChildren="插队关" disabled={record.is_jump === 1} defaultChecked={record.is_jump === 1} onChange={(c)=>{message.success(`待完善， ${c}`)}}/>
-                                   <Button type="primary" size="small" style={{marginLeft: 10}} disabled={record.status !== 2}>停止训练</Button>
-                                   <Button type="primary" size="small" style={{marginLeft: 10}} disabled={record.status !== 2}>继续训练</Button>
-                                   <Button type="primary" size="small" style={{marginLeft: 10}}>打开测试端口</Button>
-                                   <Button type="primary" size="small" style={{marginLeft: 10}}>日志</Button>
-                               </Row>
-                               <Row>
-                                   <Divider/>
-                               </Row>
-                               <Row>
-                                   <a href={record.url} target="view_window" style={{ margin: 0 }}>{record.description}</a>
-                               </Row>
-                           </Row>
-                       )
-                   }}
-                   expandRowByClick
-                   pagination={this.state.pagination}/>
+            <PageHeader
+                backIcon={false}
+                title="远程训练"
+                subTitle="管理后台"
+                tags={<Tag color="green">正常</Tag>}
+                extra={[
+                    <Button key="1" type="primary" onClick={()=>{
+                        this.setState({
+                            rightVisible: true,
+                            leftVisible: true,
+                        });
+                    }}>
+                        新增训练(非Power-ai)
+                    </Button>,
+                ]}
+                footer={
+                    <Table size={"small"} rowSelection={rowSelection} columns={columns} dataSource={list} onChange={this.handleTableChange}
+                           expandedRowRender={record => {
+                               return(
+                                   <Row style={{marginLeft: 50}}>
+                                       <Row>
+                                           <Switch style={{marginTop: -3}} checkedChildren="插队开" unCheckedChildren="插队关" disabled={record.is_jump === 1} defaultChecked={record.is_jump === 1} onChange={(c)=>{message.success(`待完善， ${c}`)}}/>
+                                           <Button type="primary" size="small" style={{marginLeft: 10}} disabled={record.status !== 2}>停止训练</Button>
+                                           <Button type="primary" size="small" style={{marginLeft: 10}} disabled={record.status !== 2}>继续训练</Button>
+                                           <Button type="primary" size="small" style={{marginLeft: 10}}>打开测试端口</Button>
+                                           <Button type="primary" size="small" style={{marginLeft: 10}}>日志</Button>
+                                       </Row>
+                                       <Row>
+                                           <Divider/>
+                                       </Row>
+                                       <Row>
+                                           <Iframe url={record.draw_url}
+                                                   width="100%"
+                                                   height="500px"
+                                                   id="myId"
+                                                   frameBorder={0}
+                                                   className="myClassname"
+                                                   display="initial"
+                                                   position="relative"/>
+                                           <a href={record.url} target="view_window" style={{ margin: 0 }}>{record.description}</a>
+                                       </Row>
+                                   </Row>
+                               )
+                           }}
+                           expandRowByClick
+                           pagination={this.state.pagination}/>
+                }
+            >
+                <div className="wrap">
+                    <Drawer
+                        title="新增训练(非Power-ai)-使用教程"
+                        placement="left"
+                        width="50%"
+                        closable={true}
+                        onClose={this.hideLeftDrawer}
+                        visible={this.state.leftVisible}
+                    >
+                        <Typography>
+                            <Title>介绍</Title>
+                            <Paragraph>
+                               远程训练系统，支持通过Power-Ai标完图直接训练，还支持手动训练其他数据和各种框架。由于软件里集成度高，几乎实现傻瓜式的配置。所以这里主要介绍怎么使用手动训练
+                            </Paragraph>
+                            <Paragraph>
+                                由于不通框架训练使用的方式也不一样，本系统主要基于docker实现训练，目前提供3种自动化集成度高的框架。<Text mark>Yolov3</Text>和<Text mark>FasterRcnn</Text>和<Text mark>MaskRcnn</Text>，
+                                当然有其他集成度较高的框架也可以通过镜像直接加载。
+                            </Paragraph>
+                            <Paragraph>
+                                <Text mark>特别说明：本系统只支持一种压缩包格式自解压<Text code>tar</Text>，上传一定要是tar格式压缩包，否则直接凉凉。</Text>
+                                <br/>
+                                <Text mark>特别说明：需要填写的目录绝对区分大小写！！！，否则也是直接凉凉。</Text>
+                            </Paragraph>
+                            <Title level={2}>以Yolov3示例：</Title>
+                            <Paragraph>
+                                <ul>
+                                    <li>
+                                        <Title level={4}>1.制作标准的2012格式的Pascal Voc数据集</Title>
+                                        <Paragraph>
+                                            在目标检测中，主要用到了 Annotations，ImageSets，JPEGImages
+                                            其中 ImageSets/Main/ 保存了具体数据集的索引，Annotations 保存了标签数据， JPEGImages 保存了图片内容。
+                                            ImageSets/Main/ 文件夹以 , $class$_train.txt $class$_val.txt的格式命名。 train.txt val.txt 例外，可以没有
+                                        </Paragraph>
+                                    </li>
+                                    <li>
+                                        <Title level={4}>2.在Pascal Voc数据集的根目录下新建配置文件
+                                            <Text mark><a target="view_window" href="https://github.com/yiningzeng/darknet-license/blob/master/remote_train/yolov3-voc.cfg">yolov3-voc.cfg</a></Text>
+                                            和<Text mark><a target="view_window" href="https://github.com/yiningzeng/darknet-license/blob/master/remote_train/use_gpus">use_gpus</a></Text></Title>
+                                        <Paragraph>
+                                            如果使用服务器来训练的话，两个配置文件都不需要改动<br/>
+                                            配置文件:<br/>
+                                            <Text mark>yolov3-voc.cfg</Text>只需要更改<Text code>batch=68</Text>和<Text code>subdivisions=32</Text>，一般情况不用更改
+                                            <br/>
+                                            <Text mark>use_gpus</Text>只是需要使用的显卡的id号通过英文<Text code>,</Text>来拼接
+                                        </Paragraph>
+                                    </li>
+                                    <li>
+                                        <Title level={4}>3.打包文件夹并上传</Title>
+                                        <Paragraph>
+                                            <Text strong>ftp账号:</Text><Text code>ftpicubic</Text><br/>
+                                            <Text strong>ftp密码:</Text><Text code>ftpicubic-123</Text><br/>
+                                            比如你的Pascal Voc数据集的目录是<Text code>我是voc目录</Text>，那么你压缩打包的文件名是<Text code>我是voc目录.tar</Text><Text strong>你一定要记住，下一步中需要用到</Text>
+                                            通过上文提供的ftp地址上传文件到根目录，推荐使用<Text code>FileZilla</Text>客户端上传
+                                        </Paragraph>
+                                    </li>
+                                    <li>
+                                        <Title level={4}>4.恭喜你已经完成了所有的配置，只用把信息提交就行了</Title>
+                                        <Paragraph>
+                                            <Text strong>点页面右上角按钮</Text>
+                                            填写项目名和上一步的信息，其他如果没更新那直接默认。主要是镜像地址，使用前咨询开发
+                                        </Paragraph>
+                                    </li>
+                                    <li>
+                                        <Title level={4}>5.等着训练</Title>
+                                    </li>
+                                </ul>
+                            </Paragraph>
+                        </Typography>
+                    </Drawer>
+
+                    <Drawer
+                        title="新增训练(非Power-ai)"
+                        placement="right"
+                        width="50%"
+                        closable={false}
+                        maskClosable={false}
+                        onClose={()=>{
+                            this.setState({
+                                rightVisible: false,
+                                leftVisible: false,
+                            });
+                        }}
+                        visible={this.state.rightVisible}
+                    >
+                        {/*doTrain:{*/}
+                        {/*projectId: undefined, // 项目id*/}
+                        {/*projectName: undefined, // 项目名称*/}
+                        {/*packageDir: undefined, // tar压缩包里面文件夹的目录名*/}
+                        {/*packageName: undefined, //tar包的名称*/}
+                        {/*assetsDir: undefined, // 素材文件夹，和packageDir相同*/}
+                        {/*assetsType: undefined, // 素材的类型，pascalVoc和coco*/}
+                        {/*providerType: undefined, // 框架的类型yolov3 fasterRcnn maskRcnn*/}
+                        {/*image: undefined, // 镜像路径*/}
+                    {/*},*/}
+                        项目名:
+                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="项目名"
+                               allowClear onChange={(e)=>this.setState({doTrain: {...this.state.doTrain,projectName: e.target.value}})}/>
+                        tar压缩包名:
+                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="tar压缩包名" addonAfter=".tar"
+                               allowClear onChange={(e)=>this.setState({doTrain: {...this.state.doTrain,packageName: `${e.target.value}.tar`}})}/>
+                        解压后的目录名:
+                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="解压后的目录名"
+                               allowClear onChange={(e)=>this.setState({doTrain: {...this.state.doTrain,packageDir: e.target.value,assetsDir: e.target.value}})}/>
+                        数据格式:
+                        <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}} defaultValue="pascalVOC"
+                                onChange={(value)=>this.setState({doTrain: {...this.state.doTrain,assetsType: value}})}>
+                            <Option value="pascalVOC">pascalVOC</Option>
+                            <Option value="coco">coco</Option>
+                            <Option value="other">other</Option>
+                        </Select>
+                        使用的框架:
+                        <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}} defaultValue="yolov3" onChange={(value)=>this.setState({doTrain: {...this.state.doTrain,providerType: value}})}>
+                            <Option value="yolov3">yolov3</Option>
+                            <Option value="fasterRcnn">fasterRcnn</Option>
+                            <Option value="maskRcnn">maskRcnn</Option>
+                            <Option value="other">other</Option>
+                        </Select>
+                        镜像地址:
+                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="tar压缩包名" addonBefore="registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:"
+                               defaultValue="darknet_auto-ai-power-v3.6" allowClear
+                               onChange={(e)=>this.setState({doTrain: {...this.state.doTrain,image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:${e.target.value}`}})}/>
+                        <div
+                            style={{
+                                position: 'absolute',
+                                left: 0,
+                                bottom: 0,
+                                width: '100%',
+                                borderTop: '1px solid #e9e9e9',
+                                padding: '10px 16px',
+                                background: '#fff',
+                                textAlign: 'right',
+                            }}
+                        >
+                            <Button onClick={()=>{
+                                this.setState({
+                                    rightVisible: false,
+                                    leftVisible: false,
+                                });
+                            }} style={{ marginRight: 8 }}>
+                               取消
+                            </Button>
+                            <Button onClick={()=>{
+
+                                console.log(JSON.stringify(this.state.doTrain));
+                                this.setState({
+                                    rightVisible: false,
+                                    leftVisible: false,
+                                    doTrain:{
+                                        ...this.state.doTrain,
+                                        projectId: moment().format('x'),
+                                    }
+                                });
+                                const {dispatch} = this.props;
+                                dispatch({
+                                    type: 'service/doTrain',
+                                    payload: this.state.doTrain,
+                                    callback: (v) => {
+                                        console.log(`加载：${JSON.stringify(v)}`);
+                                    },
+                                });
+                            }}>
+                               提交
+                            </Button>
+                        </div>
+                    </Drawer>
+
+                    <div className="content padding">{content}</div>
+                    <div className="content padding">{extraContent}</div>
+                </div>
+            </PageHeader>
+
         );
     }
 }
-
 // 1. Initialize
 const app = dva();
 console.log(2);
@@ -220,12 +496,21 @@ app.model({
             page: 0,
             list: [],
         },
+        dotrain:{}
     },
     effects: {
         *getList({ payload,callback}, { call, put }) {
             const response = yield call(getList,payload);
             yield put({
                 type: 'trains',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
+        *doTrain({ payload,callback}, { call, put }) {
+            const response = yield call(doTrain,payload);
+            yield put({
+                type: 'dotrain',
                 payload: response,
             });
             if (callback)callback(response);
@@ -244,9 +529,16 @@ app.model({
                 trains: action.payload,
             };
         },
+        dotrain(state, action) {
+            return {
+                ...state,
+                dotrain: action.payload,
+            };
+        },
     },
 });
 // 3. View
+
 const App = connect(({ service }) => ({
     service
 }))(function(props) {

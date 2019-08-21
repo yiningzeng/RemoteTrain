@@ -8,3 +8,10 @@ export async function getList(params) {
         method: 'GET',
     });
 }
+export async function doTrain(params) {
+    console.log("getList"+JSON.stringify(params));
+    return request(`http://${ip}/train`, {
+        method: 'POST',
+        body: params
+    });
+}

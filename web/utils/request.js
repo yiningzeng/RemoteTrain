@@ -68,7 +68,7 @@ export default function request(url, options) {
       else {
         newOptions.headers = {
           Accept: 'application/json',
-          // 'Content-Type': 'application/json; charset=utf-8',
+          'Content-Type': 'application/json; charset=utf-8',
           ...newOptions.headers,
         };
       }
