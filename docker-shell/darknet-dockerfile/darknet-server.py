@@ -48,21 +48,14 @@ app = Flask(__name__)
 
 is_detecton = False
 
-cfg = "/darknet/yunsheng/yolov3-voc-test.cfg"
-model = "/darknet/yunsheng/backup/yolov3-voc_last.weights"
-data = "/darknet/yunsheng/voc.data"
+cfg = "/darknet/assets/yolov3-voc-test.cfg"
+model = "/darknet/assets/backup/yolov3-voc_last.weights"
+data = "/darknet/assets/voc.data"
 save_path = "/aiimg/" 
-img_path = "/darknet/yunsheng/test3/"
-
-cfg = "/darknet/aodelu/yolov3-voc-test-416.cfg"
-model = "/darknet/aodelu/backup/yolov3-voc_last.weights"
-data = "/darknet/aodelu/voc.data"
-save_path = "/aiimg/" 
-img_path = "/darknet/aodelu/test3/"
 
 thresh = 0.1
 img_ext = "*.jpg" 
-lib_dll = "/darknet/libdarknet.so"
+lib_dll = "/darknet/libdark.so"
 
 def sample(probs):
     s = sum(probs)
@@ -151,7 +144,7 @@ if os.name == "nt":
             lib = CDLL(winGPUdll, RTLD_GLOBAL)
             print("Environment variables indicated a CPU run, but we didn't find `"+winNoGPUdll+"`. Trying a GPU run anyway.")
 else:
-    lib = CDLL("./libdarknet.so", RTLD_GLOBAL)
+    lib = CDLL(lib_dll, RTLD_GLOBAL)
 lib.network_width.argtypes = [c_void_p]
 lib.network_width.restype = c_int
 lib.network_height.argtypes = [c_void_p]

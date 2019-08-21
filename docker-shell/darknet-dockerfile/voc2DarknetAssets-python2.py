@@ -190,7 +190,7 @@ if __name__ == '__main__':
                 # print("%s.xml丢失" % filename)
                 lose = lose + 1
                 continue
-            if not os.path.exists('%s/JPEGImages/%s.image_id' % (args.voc_dir, filename)):
+            if not os.path.exists('%s/JPEGImages/%s' % (args.voc_dir, image_id)):
                 # print("%s.xml丢失" % filename)
                 lose = lose + 1
                 continue

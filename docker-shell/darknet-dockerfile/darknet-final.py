@@ -32,8 +32,9 @@ from ctypes import *
 import math
 import random
 import os
+import cv2
 import glob
-
+import time
 import base64
 from flask import Flask, request
 import numpy as np
@@ -43,13 +44,15 @@ sys.setdefaultencoding("utf8")
 app = Flask(__name__)
 
 
-cfg = "/darknet/aodelu/yolov3-voc-test-416.cfg"
-model = "/darknet/aodelu/backup/yolov3-voc_last.weights"
-data = "/darknet/aodelu/voc.data"
-save_path = "/darknet/aodelu/infer/" 
-img_path = "/darknet/aodelu/test/"
-img_ext = "*.jpg" 
-lib_dll = "/darknet/libdarknet.so"
+thresh = 0.1
+cfg = "/darknet/assets/yolov3-voc-test.cfg"
+model = "/darknet/assets/backup/yolov3-voc_last.weights"
+data = "/darknet/assets/voc.data"
+save_path = "/darknet/assets/infer/" # 检测结果保存路径 以 / 结尾
+img_path = "/darknet/assets/test/" # 检测的图片路径 以 / 结尾
+img_ext = "*.jpg" # 图片格式
+lib_dll = "/darknet/libdark.so"
+os.system("mkdir -p '%s'" % save_path)
 
 def sample(probs):
     s = sum(probs)
@@ -138,7 +141,7 @@ if os.name == "nt":
             lib = CDLL(winGPUdll, RTLD_GLOBAL)
             print("Environment variables indicated a CPU run, but we didn't find `"+winNoGPUdll+"`. Trying a GPU run anyway.")
 else:
-    lib = CDLL("./libdarknet.so", RTLD_GLOBAL)
+    lib = CDLL(lib_dll, RTLD_GLOBAL)
 lib.network_width.argtypes = [c_void_p]
 lib.network_width.restype = c_int
 lib.network_height.argtypes = [c_void_p]
@@ -454,7 +457,10 @@ def performDetect(savePath= "save",imagePath="data/dog.jpg", img=None,thresh= 0.
             if saveImage:
                 filepath, tmpfilename = os.path.split(imagePath)
                 print("fine Name: "+str(tmpfilename))
-                outPutPath = savePath + tmpfilename
+                if len(detections) > 0:
+                    outPutPath = savePath + "NG_" + tmpfilename
+                else:
+                    outPutPath = savePath + tmpfilename
                 io.imsave(outPutPath, image)
                 #io.show()
             detections = {
@@ -467,6 +473,55 @@ def performDetect(savePath= "save",imagePath="data/dog.jpg", img=None,thresh= 0.
     return detections
 
 if __name__ == "__main__":
+    if not os.path.exists(cfg):
+        raise ValueError("Invalid config path `"+os.path.abspath(cfg)+"`")
+    if not os.path.exists(model):
+        raise ValueError("Invalid weight path `"+os.path.abspath(model)+"`")
+    if not os.path.exists(data):
+        raise ValueError("Invalid data file path `"+os.path.abspath(data)+"`")
+    
+    if netMain is None:
+        netMain = load_net_custom(cfg.encode("ascii"), model.encode("ascii"), 0, 1)  # batch size = 1
+    if metaMain is None:
+        metaMain = load_meta(data.encode("ascii"))
     img_list=glob.glob(img_path+img_ext)
     for num, img_file in enumerate(img_list):
-       print(performDetect(savePath=save_path,imagePath=img_file,configPath=cfg,metaPath=data,weightPath=model))
+        print("----")
+        print(img_file)
+        filepath, tmpfilename = os.path.split(img_file)
+        img=cv2.imread(img_file, cv2.IMREAD_COLOR)
+        
+        start_time = time.time()
+        detections = detect(netMain, metaMain, img_file, thresh)
+        end_time = time.time()
+        total_time = end_time - start_time
+        
+        print(detections)
+        r=detections
+        for i in range(len(r)):
+            label = r[i][0]
+            confidence = r[i][1]
+            boxColor = (int(255 * (1 - (confidence ** 2))), int(255 * (confidence ** 2)), 0)
+            pstring = label+": "+str(np.rint(100 * confidence))+"%"
+            print(pstring)
+            x1 = r[i][2][0] - r[i][2][2] / 2
+            y1 = r[i][2][1] - r[i][2][3] / 2
+            x2 = r[i][2][0] + r[i][2][2] / 2
+            y2 = r[i][2][1] + r[i][2][3] / 2
+            print("----")
+            print r[i]
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            boxColor=(0,255,0)
+            cv2.putText(img, str(label) + " " + str(confidence), (int(x1), int(y1)), cv2.FONT_HERSHEY_SIMPLEX, 1, boxColor, 1)
+            cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), boxColor, 1)
+        print("----")
+        out_put_path = ""
+        if len(detections) > 0:
+            out_put_path = save_path + "NG_" + tmpfilename
+        else:
+            out_put_path = save_path + tmpfilename
+
+        print img_file + " > " + out_put_path
+        cv2.imwrite(out_put_path, img)
+
+    #    print(performDetect(savePath=save_path,imagePath=img_file,configPath=cfg,metaPath=data,weightPath=model))
