@@ -63,6 +63,7 @@ class pikaqiu(object):
         self.port = port
         self.username = username
         self.password = password
+        self.sql_host = 'localhost'
         # region 画图参数
         self.draw = True
         self.draw_windows = None
@@ -336,6 +337,8 @@ class pikaqiu(object):
         return True
 
     def postgres_execute(self, sql=None, select=False):
+        if self.postgres_conn is None:
+            self.postgres_connect(host=self.sql_host)
         result = None
         if sql is None:
             log.info("sql null")
@@ -363,6 +366,7 @@ class pikaqiu(object):
         self.draw = draw
         self.draw_host = draw_host
         self.draw_port = draw_port
+        self.sql_host = sql_host
         if draw:
             os.system("nohup visdom -port %d > visdom.log 2>&1 & \echo $! > visdom.pid" % draw_port)
         if sql:
@@ -420,9 +424,11 @@ def do_train_http():
                      "providerType": data["providerType"],
                      "providerOptions": {"yolov3Image": data["image"]}
                      }
-        ff.channel.basic_publish('ai.train.topic', "package.upload-done.%s" % data['projectName'], package_info)
-        ff.channel.basic_publish('ai.train.topic', "train.start.%s" % data['projectName'], trainInfo)
-    return Response(json.dumps({"res": "ok"}), mimetype='application/json')
+        ff.channel.basic_publish('ai.package.topic', "package.upload-done.%s" % data['projectName'], json.dumps(package_info))
+        ff.channel.basic_publish('ai.train.topic', "train.start.%s" % data['projectName'], json.dumps(trainInfo))
+        return Response(json.dumps({"res": "ok"}), mimetype='application/json')
+    else:
+        return Response(json.dumps({"res": "err"}), mimetype='application/json')
 
 
 @app.route('/draw_chart', methods=['POST'])
@@ -496,8 +502,8 @@ if __name__ == '__main__':
     end_date(datetime or str)	结束日期
     timezone(datetime.tzinfo or   str)	时区
     '''
-    # scheduler.add_job(ff.get_train_one, 'interval', minutes=5)
-    # scheduler.add_job(ff.get_package_one, 'interval', minutes=1)
+    scheduler.add_job(ff.get_train_one, 'interval', minutes=5)
+    scheduler.add_job(ff.get_package_one, 'interval', minutes=1)
     # scheduler.add_job(ff.get_train_one, 'interval', seconds=10)
     # scheduler.add_job(ff.get_package_one, 'interval', seconds=5)
     scheduler.start()
