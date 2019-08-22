@@ -149,18 +149,7 @@ class pikaqiu(object):
             suc, rows = self.postgres_execute("SELECT * FROM train_record WHERE project_id='%s'" %
                                               package_info['projectId'],
                                               True)
-            if len(rows) > 0:
-                self.postgres_execute("UPDATE train_record SET "
-                                      "project_name='%s', status=%d,"
-                                      " assets_directory_base='%s', assets_directory_name='%s',"
-                                      " create_time='%s' WHERE project_id='%s'" %
-                                      (package_info['projectName'],
-                                       1,
-                                       self.package_base_path,
-                                       package_info["packageDir"],
-                                       datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                       package_info['projectId']))
-            else:
+            if rows is None or len(rows) <= 0:
                 self.postgres_execute("INSERT INTO train_record "
                                       "(project_id, project_name,"
                                       " status, assets_directory_base,"
@@ -173,6 +162,17 @@ class pikaqiu(object):
                                        self.package_base_path,
                                        package_info["packageDir"],
                                        datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+            else:
+                self.postgres_execute("UPDATE train_record SET "
+                                      "project_name='%s', status=%d,"
+                                      " assets_directory_base='%s', assets_directory_name='%s',"
+                                      " create_time='%s' WHERE project_id='%s'" %
+                                      (package_info['projectName'],
+                                       1,
+                                       self.package_base_path,
+                                       package_info["packageDir"],
+                                       datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                       package_info['projectId']))
             # endregion
             ch.basic_ack(method_frame.delivery_tag)
             return method_frame.delivery_tag, body.decode('utf-8')
