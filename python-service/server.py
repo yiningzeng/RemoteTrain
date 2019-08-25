@@ -248,13 +248,13 @@ class pikaqiu(object):
                         docker_volume = None
                         if train_info['providerType'] == 'yolov3':
                             image_url = train_info['providerOptions']['yolov3Image']
-                            docker_volume = "/Detectron/detectron/datasets/data"
+                            docker_volume = "/darknet/assets"
                         elif train_info['providerType'] == 'fasterRcnn':
                             image_url = train_info['providerOptions']['fasterRcnnImage']
                             docker_volume = "/Detectron/detectron/datasets/data"
                         elif train_info['providerType'] == 'maskRcnn':
                             image_url = train_info['providerOptions']['maskRcnnImage']
-                            docker_volume = "/darknet/assets"
+                            docker_volume = "/Detectron/detectron/datasets/data"
                         elif train_info['providerType'] == 'other':
                             image_url = train_info['providerOptions']['otherImage']
                             docker_volume = train_info['providerOptions']['docker_volume']
