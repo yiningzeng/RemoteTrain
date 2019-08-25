@@ -93,14 +93,15 @@ class pikaqiu(object):
         if err:
             a, rows = ff.postgres_execute(
                         "SELECT project_id, assets_directory_base, assets_directory_name, project_name"
-                        " FROM train_record WHERE project_id='%s'" % project_id, True)
-            if rows is not None or len(rows) > 0:
+                        " FROM train_record WHERE status=2", True)
+            if rows is not None and len(rows) > 0:
                 assets_directory_name = rows[0][2]
                 os.system("echo 训练失败-梯度爆炸了 > '%s/%s/train_status.log'" % (self.package_base_path, assets_directory_name))
+                os.system("echo '%s' | sudo -S docker stop `cat '%s/%s/train.dname'`" % (self.root_password, self.package_base_path, assets_directory_name))
                 self.postgres_execute("UPDATE train_record SET "
                                       "status=%d, project_name='%s'"
                                       " WHERE project_id='%s'" %
-                                      (-1,str(rows[0][3]) + "-梯度爆炸了"))
+                                      (-1, str(rows[0][3]) + "-梯度爆炸了", rows[0][0]))
         else:    
             for record in data:
                 if self.draw_windows is None:
@@ -111,7 +112,7 @@ class pikaqiu(object):
                     a, rows = ff.postgres_execute(
                         "SELECT project_id, assets_directory_base, assets_directory_name"
                         " FROM train_record WHERE project_id='%s'" % project_id, True)
-                    if rows is not None or len(rows) > 0:
+                    if rows is not None and len(rows) > 0:
                         assets_directory_name = rows[0][2]
                         if debug:
                             self.draw_windows = Visdom(env=project_id)
@@ -454,15 +455,12 @@ def do_train_http():
 
 @app.route('/draw_chart', methods=['POST'])
 def draw_chat_http():
-    str_data = str(request.get_data())
-    if "nan" in str_data:
-        str_data = str_data.replace("nan", "\"nan\"")
-        log.info("训练失败了，梯度爆炸了:%s" % str_data)
-    data = json.loads(str_data)        # 获取 JOSN 数据
-    print(str_data)
-    # data = data.get('obj')     #  以字典形式获取参数
-    if data is not None:
-        ff.draw_chat(data, err=True)
+    try:
+        data = request.json
+        if data is not None:
+            ff.draw_chat(data)
+    except Exception as e:
+        ff.draw_chat(err=True)
     return Response(json.dumps({"res": "ok"}), mimetype='application/json')
 
 

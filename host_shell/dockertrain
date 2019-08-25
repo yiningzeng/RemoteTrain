@@ -127,5 +127,5 @@ if [ $docker_type -eq 2 ];then
 else
 	echo $password | sudo -S nvidia-docker run --rm -d -p $port:8097 -v "$volume":"$docker_volume" --name "$project_name-$port" $registry > "$volume/container_id.log" 2>&1
 fi
-cat "$volume/container_id.log"
+echo "$project_name-$port" > "$volume/train.dname"
 echo "train_done"
