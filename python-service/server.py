@@ -86,43 +86,57 @@ class pikaqiu(object):
         # endregion
         # self.consume()
 
-    def draw_chat(self, data=[{"x": 13.00, "y": 13.33, "win_id": "窗体名称->就是当前容器的id+该图标的含义", "title": "窗体显示的名称"}], debug=False):
+    def draw_chat(self, data=[{"x": 13.00, "y": 13.33, "win_id": "窗体名称->就是当前容器的id+该图标的含义", "title": "窗体显示的名称"}], debug=False, err=False):
         # record 定义的格式{"x": 13.00, "y": 13.33, "win_id": "窗体名称->就是当前容器的id+该图标的含义", "title": "窗体显示的名称"}
         if debug:
             self.draw_windows = Visdom(env="test")
-        for record in data:
-            if self.draw_windows is None:
-                temp = record["win_id"]
-                pos = temp.rfind("-")
-                project_id = temp[:pos]
-                print(project_id)  # "C:/Python27/1"
-                a, rows = ff.postgres_execute(
-                    "SELECT project_id, assets_directory_base, assets_directory_name"
-                    " FROM train_record WHERE project_id='%s'" % project_id, True)
-                if rows is not None or len(rows) > 0:
-                    assets_directory_name = rows[0][2]
-                    if debug:
-                        self.draw_windows = Visdom(env=project_id)
-                    else:
-                        draw_log = self.package_base_path + "/" + assets_directory_name + "/draw.log"
-                        self.draw_windows = Visdom(env=project_id, log_to_filename=draw_log)
-            if self.draw_windows.win_exists(record["win_id"]):
-                self.draw_windows.line(
-                    X=np.array([record["x"]]),
-                    Y=np.array([record["y"]]),
-                    win=record["win_id"],
-                    opts=dict(title=record["title"], width=600, height=380),
-                    update='append')
-            else:
-                self.draw_windows.line(
-                    win=record["win_id"],
-                    X=np.array([0]),
-                    Y=np.array([0]),
-                    opts=dict(title=record["title"], width=600, height=380))
+        if err:
+            a, rows = ff.postgres_execute(
+                        "SELECT project_id, assets_directory_base, assets_directory_name, project_name"
+                        " FROM train_record WHERE project_id='%s'" % project_id, True)
+            if rows is not None or len(rows) > 0:
+                assets_directory_name = rows[0][2]
+                os.system("echo 训练失败-梯度爆炸了 > '%s/%s/train_status.log'" % (self.package_base_path, assets_directory_name))
+                self.postgres_execute("UPDATE train_record SET "
+                                      "status=%d, project_name='%s'"
+                                      " WHERE project_id='%s'" %
+                                      (-1,str(rows[0][3]) + "-梯度爆炸了"))
+        else:    
+            for record in data:
+                if self.draw_windows is None:
+                    temp = record["win_id"]
+                    pos = temp.rfind("-")
+                    project_id = temp[:pos]
+                    print(project_id)  # "C:/Python27/1"
+                    a, rows = ff.postgres_execute(
+                        "SELECT project_id, assets_directory_base, assets_directory_name"
+                        " FROM train_record WHERE project_id='%s'" % project_id, True)
+                    if rows is not None or len(rows) > 0:
+                        assets_directory_name = rows[0][2]
+                        if debug:
+                            self.draw_windows = Visdom(env=project_id)
+                        else:
+                            draw_log = self.package_base_path + "/" + assets_directory_name + "/draw.log"
+                            self.draw_windows = Visdom(env=project_id, log_to_filename=draw_log)
+                if self.draw_windows.win_exists(record["win_id"]):
+                    self.draw_windows.line(
+                        X=np.array([record["x"]]),
+                        Y=np.array([record["y"]]),
+                        win=record["win_id"],
+                        opts=dict(title=record["title"], width=600, height=380),
+                        update='append')
+                else:
+                    self.draw_windows.line(
+                        win=record["win_id"],
+                        X=np.array([0]),
+                        Y=np.array([0]),
+                        opts=dict(title=record["title"], width=600, height=380))
     '''
     获取单个解包队列数据
     '''
     def get_package_one(self):
+        if self.channel is None:
+            ff.init(sql_host='192.168.31.75', draw_host='192.168.31.75')
         log.info('get_package_one:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         os.system("notify-send '%s' '%s' -t %d" % ('解包', '解包数据', 10000))
         method_frame, header_frame, body = self.channel.basic_get(queue=self.package_queue, auto_ack=False)
@@ -181,6 +195,8 @@ class pikaqiu(object):
     获取单个训练队列数据
     '''
     def get_train_one(self):
+        if self.channel is None:
+            ff.init(sql_host='192.168.31.75', draw_host='192.168.31.75')
         log.info('get_train_one:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         os.system("notify-send '%s' '%s' -t %d" % ('ceshi', '测试', 10000))
         method_frame, header_frame, body = self.channel.basic_get(queue=self.train_queue, auto_ack=False)
@@ -256,12 +272,17 @@ class pikaqiu(object):
                             return
 
                         res = os.popen(train_cmd).read().replace('\n', '')
+                        container_id = os.popen("cat %s/container_id.log" % self.package_base_path + "/" + train_info["assetsDir"]).read().replace('\n', '')
+                        if len(container_id) > 80:
+                            container_id = "more than 80"
+                        elif len(container_id) < 64:
+                            container_id = "less 64"
                         if "train_done" not in res:
                             log.info("训练有误: %s" % res)
                             draw_url = 'http://%s:%d/env/%s' % (self.draw_host, self.draw_port, train_info['projectId'])
                             sql = "UPDATE train_record SET container_id='%s', status=%d, net_framework='%s'," \
                                   " assets_type='%s', draw_url='%s', image_url='%s' where project_id='%s'" % \
-                                  (res, -1, train_info['providerType'],
+                                  (container_id, -1, train_info['providerType'],
                                    train_info['assetsType'],
                                    draw_url,
                                    image_url,
@@ -282,7 +303,7 @@ class pikaqiu(object):
                         draw_url = 'http://%s:%d/env/%s' % (self.draw_host, self.draw_port, train_info['projectId'])
                         sql = "UPDATE train_record SET container_id='%s', status=%d, net_framework='%s'," \
                               " assets_type='%s', draw_url='%s', image_url='%s' where project_id='%s'" % \
-                              (res, 2, train_info['providerType'],
+                              (container_id, 2, train_info['providerType'],
                                train_info['assetsType'],
                                draw_url,
                                image_url,
@@ -433,10 +454,15 @@ def do_train_http():
 
 @app.route('/draw_chart', methods=['POST'])
 def draw_chat_http():
-    data = request.json        # 获取 JOSN 数据
+    str_data = str(request.get_data())
+    if "nan" in str_data:
+        str_data = str_data.replace("nan", "\"nan\"")
+        log.info("训练失败了，梯度爆炸了:%s" % str_data)
+    data = json.loads(str_data)        # 获取 JOSN 数据
+    print(str_data)
     # data = data.get('obj')     #  以字典形式获取参数
     if data is not None:
-        ff.draw_chat(data)
+        ff.draw_chat(data, err=True)
     return Response(json.dumps({"res": "ok"}), mimetype='application/json')
 
 
@@ -493,14 +519,14 @@ if __name__ == '__main__':
     # scheduler.add_job(remind, 'cron', second="0/2")
 
     '''
-    weeks(int)	间隔几周
-    days(int)	间隔几天
-    hours(int)	间隔几小时
-    minutes(int)	间隔几分钟
-    seconds(int)	间隔多少秒
-    start_date(datetime or str)	开始日期
-    end_date(datetime or str)	结束日期
-    timezone(datetime.tzinfo or   str)	时区
+    weeks(int)  间隔几周
+    days(int)   间隔几天
+    hours(int)  间隔几小时
+    minutes(int)        间隔几分钟
+    seconds(int)        间隔多少秒
+    start_date(datetime or str) 开始日期
+    end_date(datetime or str)   结束日期
+    timezone(datetime.tzinfo or   str)  时区
     '''
     scheduler.add_job(ff.get_train_one, 'interval', minutes=5)
     scheduler.add_job(ff.get_package_one, 'interval', minutes=1)
@@ -512,3 +538,4 @@ if __name__ == '__main__':
     # ff.consume(ch, on_message_callback)
     app.run(host="0.0.0.0", port=18888)
     embed()
+
