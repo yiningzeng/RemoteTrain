@@ -11,6 +11,7 @@ import 'moment/locale/zh-cn';
 import { getList, doTrain } from './services/api';
 const { Title, Paragraph, Text } = Typography;
 const { Option } = Select;
+const InputGroup = Input.Group;
 moment.locale('zh-cn');
 
 class FreeFish extends React.Component {
@@ -20,6 +21,7 @@ class FreeFish extends React.Component {
         loading: false,
         leftVisible: false,
         rightVisible: false,
+        doChangeAssetsDir: true,
         /*
         *  package_info = {"projectId": data["projectId"], "projectName": data["projectName"], "packageDir": data["packageDir"], "packageName": data["packageName"]}
         trainInfo = {"projectId": data["projectId"],
@@ -29,11 +31,15 @@ class FreeFish extends React.Component {
                      "providerType": data["providerType"],
                      "providerOptions": {"yolov3Image": data["image"]}
                      }*/
-        doTrain:{
+        api: {
+            url: localStorage.getItem("api.url") === null?"192.168.31.75":localStorage.getItem("api.url"),
+            port: localStorage.getItem("api.port") === null?18888:localStorage.getItem("api.port"),
+        },
+        doTrain: {
             projectId: undefined, // 项目id
             projectName: undefined, // 项目名称
             packageDir: undefined, // tar压缩包里面文件夹的目录名
-            packageName: undefined, //tar包的名称
+            packageName: "", //tar包的名称
             assetsDir: undefined, // 素材文件夹，和packageDir相同
             assetsType: "pascalVoc", // 素材的类型，pascalVoc和coco和other
             providerType: "yolov3", // 框架的类型yolov3 fasterRcnn maskRcnn
@@ -194,7 +200,7 @@ class FreeFish extends React.Component {
                         }
                         return true;
                     });
-                    this.setState({ selectedRowKeys: newSelectedRowKeys });
+                    this.setState({...this.state, selectedRowKeys: newSelectedRowKeys });
                 },
             }, {
                 key: 'even',
@@ -265,6 +271,10 @@ class FreeFish extends React.Component {
                         this.setState({
                             rightVisible: true,
                             leftVisible: true,
+                            doTrain:{
+                                ...this.state.doTrain,
+                                projectId: moment().format('x')
+                            }
                         });
                     }}>
                         新增训练(非Power-ai)
@@ -396,16 +406,69 @@ class FreeFish extends React.Component {
                         {/*assetsType: undefined, // 素材的类型，pascalVoc和coco*/}
                         {/*providerType: undefined, // 框架的类型yolov3 fasterRcnn maskRcnn*/}
                         {/*image: undefined, // 镜像路径*/}
-                    {/*},*/}
+                        {/*},*/}
+                        接口地址:
+                        <InputGroup style={{marginTop: "10px", marginBottom: "20px"}} compact>
+                            <Input style={{ width: '50%' }} addonBefore="http://" value={this.state.api.url}
+                                   onChange={e=>{
+                                       this.setState({
+                                           ...this.state,
+                                           api:{
+                                               ...this.state.api,
+                                               url: e.target.value,
+                                           }
+                                       });
+                                   }}
+                                   placeholder="网址不带http://" allowClear/>
+                            <Input
+                                style={{
+                                    width: 30,
+                                    borderLeft: 0,
+                                    pointerEvents: 'none',
+                                    backgroundColor: '#fff',
+                                }}
+                                placeholder=":"
+                                disabled
+                            />
+                            <Input style={{ width: '10%', textAlign: 'center', borderLeft: 0 }} value={this.state.api.port} onChange={(e)=>{
+                                this.setState({
+                                    ...this.state,
+                                    api:{
+                                        ...this.state.api,
+                                        port: e.target.value,
+                                    }
+                                });
+                            }} defaultValue={this.state.apiPort} placeholder="port" />
+                            <Button type="primary" onClick={()=>{
+                                localStorage.setItem("api.url", this.state.api.url);
+                                localStorage.setItem("api.port", this.state.api.port);
+                                message.success("保存成功");
+                            }}>保存接口</Button>
+                        </InputGroup>
+                        项目ID:
+                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="项目ID" value={this.state.doTrain.projectId}
+                               allowClear onChange={(e)=>this.setState({doTrain: {...this.state.doTrain,projectId: e.target.value}})}/>
                         项目名:
                         <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="项目名"
                                allowClear onChange={(e)=>this.setState({doTrain: {...this.state.doTrain,projectName: e.target.value}})}/>
                         tar压缩包名:
                         <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="tar压缩包名" addonAfter=".tar"
-                               allowClear onChange={(e)=>this.setState({doTrain: {...this.state.doTrain,packageName: `${e.target.value}.tar`}})}/>
+                               allowClear onChange={(e)=>this.setState({
+                                doTrain: {
+                                    ...this.state.doTrain,
+                                    packageName: `${e.target.value}.tar`,
+                                    packageDir: this.state.doChangeAssetsDir?e.target.value:this.state.doTrain.packageDir,
+                                    assetsDir: this.state.doChangeAssetsDir?e.target.value:this.state.doTrain.assetsDir,
+                                }
+                               })}/>
                         解压后的目录名:
-                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="解压后的目录名"
-                               allowClear onChange={(e)=>this.setState({doTrain: {...this.state.doTrain,packageDir: e.target.value,assetsDir: e.target.value}})}/>
+                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="解压后的目录名" value={this.state.doTrain.assetsDir}
+                               allowClear onChange={(e)=>this.setState({
+                                doChangeAssetsDir: false,
+                                doTrain: {
+                                   ...this.state.doTrain,
+                                    packageDir: e.target.value,assetsDir: e.target.value
+                               }})}/>
                         数据格式:
                         <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}} defaultValue="pascalVOC"
                                 onChange={(value)=>this.setState({doTrain: {...this.state.doTrain,assetsType: value}})}>
@@ -447,20 +510,24 @@ class FreeFish extends React.Component {
                             <Button onClick={()=>{
 
                                 console.log(JSON.stringify(this.state.doTrain));
-                                this.setState({
-                                    rightVisible: false,
-                                    leftVisible: false,
-                                    doTrain:{
-                                        ...this.state.doTrain,
-                                        projectId: moment().format('x'),
-                                    }
-                                });
                                 const {dispatch} = this.props;
                                 dispatch({
                                     type: 'service/doTrain',
                                     payload: this.state.doTrain,
                                     callback: (v) => {
-                                        console.log(`加载：${JSON.stringify(v)}`);
+                                        if (v["res"]==="ok"){
+                                            message.success("成功加入训练队列");
+                                            this.setState({
+                                                rightVisible: false,
+                                                leftVisible: false,
+                                                doTrain:{
+                                                    ...this.state.doTrain,
+                                                }
+                                            });
+                                        }
+                                        else {
+                                            message.error("加入训练队列失败");
+                                        }
                                     },
                                 });
                             }}>
