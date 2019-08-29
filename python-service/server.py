@@ -228,7 +228,8 @@ def do_basic_publish(exchange, routing_key, body):
 def do_basic_get(queue, auto_ack=False):
     connection = pika.BlockingConnection(ff.parameters)
     channel = connection.channel()
-    return connection, channel, channel.basic_get(queue=queue, auto_ack=auto_ack)
+    method_frame, header_frame, body = channel.basic_get(queue=queue, auto_ack=auto_ack)
+    return connection, channel, method_frame, header_frame, body
 
 
 # 获取单个解包队列数据
