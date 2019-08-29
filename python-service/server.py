@@ -544,8 +544,8 @@ if __name__ == '__main__':
     end_date(datetime or str)   结束日期
     timezone(datetime.tzinfo or   str)  时区
     '''
-    scheduler.add_job(get_train_one, 'interval', minutes=5000)
-    scheduler.add_job(get_package_one, 'interval', minutes=1000)
+    scheduler.add_job(get_train_one, 'interval', minutes=5)
+    scheduler.add_job(get_package_one, 'interval', minutes=1)
     # scheduler.add_job(ff.get_train_one, 'interval', seconds=10)
     # scheduler.add_job(ff.get_package_one, 'interval', seconds=5)
     scheduler.start()
