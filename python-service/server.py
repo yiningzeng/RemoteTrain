@@ -112,14 +112,14 @@ class pikaqiu(object):
                     project_id = temp[:pos]
                     print(project_id)  # "C:/Python27/1"
                     a, rows = ff.postgres_execute(
-                        "SELECT project_id, assets_directory_base, assets_directory_name"
+                        "SELECT project_id, assets_directory_base, assets_directory_name, project_name"
                         " FROM train_record WHERE project_id='%s'" % project_id, True)
                     if rows is not None and len(rows) > 0:
                         assets_directory_name = rows[0][2]
                         self.postgres_execute("UPDATE train_record SET "
-                                              "status=%d"
+                                              "status=%d, project_name='%s'"
                                               " WHERE project_id='%s'" %
-                                              (2, rows[0][0]))
+                                              (2, str(rows[0][3]).replace("梯度爆炸了", ""), rows[0][0]))
                         if debug:
                             self.draw_windows = Visdom(env=project_id)
                         else:
@@ -373,8 +373,8 @@ def get_train_one():
                         "assetsDir"]).read().replace('\n', '')
                     if len(container_id) > 80:
                         container_id = "more than 80"
-                    elif len(container_id) < 63:
-                        container_id = "less 63"
+                    # elif len(container_id) < 63:
+                    #     container_id = "less 63"
                     if "train_done" not in res:
                         log.info("训练有误: %s" % res)
                         draw_url = 'http://%s:%d/env/%s' % (ff.draw_host, ff.draw_port, train_info['projectId'])
