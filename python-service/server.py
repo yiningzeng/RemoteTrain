@@ -116,6 +116,10 @@ class pikaqiu(object):
                         " FROM train_record WHERE project_id='%s'" % project_id, True)
                     if rows is not None and len(rows) > 0:
                         assets_directory_name = rows[0][2]
+                        self.postgres_execute("UPDATE train_record SET "
+                                              "status=%d"
+                                              " WHERE project_id='%s'" %
+                                              (2, rows[0][0]))
                         if debug:
                             self.draw_windows = Visdom(env=project_id)
                         else:
@@ -542,6 +546,7 @@ def draw_chat_http():
             ff.draw_chat(data)
     except Exception as e:
         ff.draw_chat(err=True)
+        log.error(e)
     return Response(json.dumps({"res": "ok"}), mimetype='application/json')
 
 
