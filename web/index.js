@@ -16,8 +16,10 @@ moment.locale('zh-cn');
 
 class FreeFish extends React.Component {
     state = {
+        timer: null,
+        refreshInterval: localStorage.getItem("refreshInterval") === null?30000:localStorage.getItem("refreshInterval"),
         selectedRowKeys: [], // Check here to configure the default column
-        pagination: {defaultPageSize:50},
+        pagination: {defaultPageSize:50, current:0},
         loading: false,
         leftVisible: false,
         rightVisible: false,
@@ -81,6 +83,33 @@ class FreeFish extends React.Component {
                 });
             },
         });
+        this.state.timer=setInterval(()=>{
+            dispatch({
+                type: 'service/getList',
+                payload: {
+                    page: this.state.pagination.current,
+                    num: this.state.pagination.defaultPageSize,
+                },
+                callback: (v) => {
+                    console.log(`加载：${JSON.stringify(v)}`);
+                    this.setState({
+                        ...this.state,
+                        pagination:{
+                            ...this.state.pagination,
+                            total: v["total"],
+                            pageSize: v["num"],
+                        }
+                    });
+                },
+            });
+            console.log("我是定时任务");
+        }, this.state.refreshInterval);
+    }
+
+    componentWillUnmount() {
+        if(this.state.timer!= null) {
+            clearInterval(this.state.timer);
+        }
     }
 
     handleTableChange = (pagination, filters, sorter) => {
@@ -171,6 +200,7 @@ class FreeFish extends React.Component {
                 else if(v === 1) return  <Tag color="#f50">解包完成</Tag>;
                 else if(v === 2) return  <Button type="danger" loading>正在训练</Button>;
                 else if(v === 3) return  <div><Tag color="#008000">训练完成</Tag><Icon type="smile" theme="twoTone" /></div>;
+                else if(v === -1) return  <Tag color="#708090">训练出错</Tag>;
                 else return  <Tag>未知</Tag>;
             }
         }];
@@ -267,6 +297,15 @@ class FreeFish extends React.Component {
                 subTitle="管理后台"
                 tags={<Tag color="green">正常</Tag>}
                 extra={[
+                    <span>页面刷新时间:</span>,
+                    <Select defaultValue={`${this.state.refreshInterval/1000}s`} style={{ width: 120 }} onChange={(v)=>{
+                        localStorage.setItem("refreshInterval", v);
+                    }}>
+                        <Option value="5000">5s</Option>
+                        <Option value="10000">10s</Option>
+                        <Option value="30000">30s</Option>
+                        <Option value="60000">60s</Option>
+                    </Select>,
                     <Button key="1" type="primary" onClick={()=>{
                         this.setState({
                             rightVisible: true,
