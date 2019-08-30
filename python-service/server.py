@@ -438,6 +438,45 @@ def get_train_one():
     return method_frame.delivery_tag, body.decode('utf-8')
 
 
+@app.route('/power-ai-train', methods=['POST'])
+def do_power_ai_train_http():
+    data = request.json  # 获取 JOSN 数据
+    # data = data.get('obj')     #  以字典形式获取参数
+    if data is not None:
+        package_info = {"projectId": data["projectId"], "projectName": data["projectName"],
+                        "packageDir": data["packageDir"], "packageName": data["packageName"]}
+        # region 更新数据库
+        # 这里插入前需要判断是否存在相同的项目
+        suc, rows = ff.postgres_execute("SELECT * FROM train_record WHERE project_id='%s'" % package_info['projectId'], True)
+        if rows is None or len(rows) <= 0:
+            ff.postgres_execute("INSERT INTO train_record "
+                                "(project_id, project_name,"
+                                " status, assets_directory_base,"
+                                " assets_directory_name, create_time) "
+                                "VALUES ('%s', '%s', %d, '%s', '%s', '%s')" %
+                                (package_info['projectId'],
+                                 package_info['projectName'],
+                                 0,
+                                 ff.package_base_path,
+                                 package_info["packageDir"],
+                                 datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        else:
+            ff.postgres_execute("UPDATE train_record SET "
+                                "project_name='%s', status=%d,"
+                                " assets_directory_base='%s', assets_directory_name='%s',"
+                                " create_time='%s' WHERE project_id='%s'" %
+                                (package_info['projectName'],
+                                 0,
+                                 ff.package_base_path,
+                                 package_info["packageDir"],
+                                 datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                 package_info['projectId']))
+        # endregion
+        return Response(json.dumps({"res": "ok"}), mimetype='application/json')
+    else:
+        return Response(json.dumps({"res": "err"}), mimetype='application/json')
+
+
 @app.route('/train', methods=['POST'])
 def do_train_http():
     data = request.json  # 获取 JOSN 数据
@@ -570,8 +609,9 @@ if __name__ == '__main__':
     '''
     scheduler.add_job(get_train_one, 'interval', minutes=5)
     scheduler.add_job(get_package_one, 'interval', minutes=1)
-    # scheduler.add_job(ff.get_train_one, 'interval', seconds=10)
-    # scheduler.add_job(ff.get_package_one, 'interval', seconds=5)
+
+    # scheduler.add_job(get_train_one, 'interval', seconds=10)
+    # scheduler.add_job(get_package_one, 'interval', seconds=5)
     scheduler.start()
 
     log.info("start")
