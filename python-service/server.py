@@ -249,14 +249,11 @@ def get_package_one():
         package_info = json.loads(body.decode('utf-8'))
         log.info('开始解包')
         os.system('echo "%s" | sudo -S chmod -R 777 /assets' % ff.root_password)
-        os.system(
-            "tar -xvf '%s/%s' -C '%s'" % (ff.package_base_path, package_info["packageName"], ff.package_base_path))
+        os.system("tar -xvf '%s/%s' -C '%s'" % (ff.package_base_path, package_info["packageName"], ff.package_base_path))
         os.system("echo 1 > '%s/%s/untar.log'" % (ff.package_base_path, package_info["packageDir"]))
-        os.system("echo '%s\c' > '%s/%s/project_id.log'" % (
-        package_info['projectId'], ff.package_base_path, package_info["packageDir"]))
+        os.system("echo '%s\c' > '%s/%s/project_id.log'" % (package_info['projectId'], ff.package_base_path, package_info["packageDir"]))
         os.system("echo 等待训练 > '%s/%s/train_status.log'" % (ff.package_base_path, package_info["packageDir"]))
-        os.system(
-            "echo '%s' | sudo -S rm '%s/%s'" % (ff.root_password, ff.package_base_path, package_info["packageName"]))
+        os.system("echo '%s' | sudo -S rm '%s/%s'" % (ff.root_password, ff.package_base_path, package_info["packageName"]))
         # region 更新数据库
         # 这里插入前需要判断是否存在相同的项目
         suc, rows = ff.postgres_execute("SELECT * FROM train_record WHERE project_id='%s'" %
@@ -267,7 +264,6 @@ def get_package_one():
                                 "(project_id, project_name,"
                                 " status, assets_directory_base,"
                                 " assets_directory_name, create_time) "
-
                                 "VALUES ('%s', '%s', %d, '%s', '%s', '%s')" %
                                 (package_info['projectId'],
                                  package_info['projectName'],
@@ -467,6 +463,33 @@ def do_train_http():
                      }
         do_basic_publish('ai.package.topic', "package.upload-done.%s" % data['projectName'], json.dumps(package_info))
         do_basic_publish('ai.train.topic', "train.start.%s" % data['projectName'], json.dumps(trainInfo))
+        # region 更新数据库
+        # 这里插入前需要判断是否存在相同的项目
+        suc, rows = ff.postgres_execute("SELECT * FROM train_record WHERE project_id='%s'" % package_info['projectId'], True)
+        if rows is None or len(rows) <= 0:
+            ff.postgres_execute("INSERT INTO train_record "
+                                "(project_id, project_name,"
+                                " status, assets_directory_base,"
+                                " assets_directory_name, create_time) "
+                                "VALUES ('%s', '%s', %d, '%s', '%s', '%s')" %
+                                (package_info['projectId'],
+                                 package_info['projectName'],
+                                 0,
+                                 ff.package_base_path,
+                                 package_info["packageDir"],
+                                 datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        else:
+            ff.postgres_execute("UPDATE train_record SET "
+                                "project_name='%s', status=%d,"
+                                " assets_directory_base='%s', assets_directory_name='%s',"
+                                " create_time='%s' WHERE project_id='%s'" %
+                                (package_info['projectName'],
+                                 0,
+                                 ff.package_base_path,
+                                 package_info["packageDir"],
+                                 datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                 package_info['projectId']))
+        # endregion
         return Response(json.dumps({"res": "ok"}), mimetype='application/json')
     else:
         return Response(json.dumps({"res": "err"}), mimetype='application/json')
