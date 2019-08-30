@@ -351,7 +351,7 @@ def get_train_one():
                         image_url = train_info['providerOptions']['otherImage']
                         docker_volume = train_info['providerOptions']['docker_volume']
                     train_cmd = "dockertrain -n '%s' -v '%s' -w '%s' -t 2 -r '%s' -f '%s' -d '%s'" % \
-                                (train_info["projectName"] + "_" + train_info["projectId"],
+                                (train_info["projectId"],
                                  ff.package_base_path + "/" + train_info["assetsDir"],
                                  ff.root_password,
                                  image_url,
