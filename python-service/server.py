@@ -219,7 +219,7 @@ class pikaqiu(object):
 
 
 # 队列新增，每次重新连接，防止出现断开的情况，并且会有重试机制
-@retry(pika.exceptions.ChannelWrongStateError, delay=3, jitter=(1, 3))
+@retry(pika.exceptions.ChannelWrongStateError, param=3, delay=3, jitter=(1, 3))
 def do_basic_publish(exchange, routing_key, body):
     connection = pika.BlockingConnection(ff.parameters)
     channel = connection.channel()
@@ -228,7 +228,7 @@ def do_basic_publish(exchange, routing_key, body):
 
 
 # 队列单个获取，每次重新连接，防止出现断开的情况，并且会有重试机制
-@retry(pika.exceptions.ChannelWrongStateError, delay=3, jitter=(1, 3))
+@retry(pika.exceptions.ChannelWrongStateError, param=3, delay=3, jitter=(1, 3))
 def do_basic_get(queue, auto_ack=False):
     connection = pika.BlockingConnection(ff.parameters)
     channel = connection.channel()

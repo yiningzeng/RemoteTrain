@@ -18,6 +18,7 @@ class FreeFish extends React.Component {
     state = {
         timer: null,
         refreshInterval: localStorage.getItem("refreshInterval") === null?30000:localStorage.getItem("refreshInterval"),
+        refreshTime: moment().format("YYYY-MM-DD HH:mm:ss"),
         selectedRowKeys: [], // Check here to configure the default column
         pagination: {defaultPageSize:50, current:0},
         loading: false,
@@ -94,6 +95,7 @@ class FreeFish extends React.Component {
                     console.log(`加载：${JSON.stringify(v)}`);
                     this.setState({
                         ...this.state,
+                        refreshTime: moment().format("YYYY-MM-DD HH:mm:ss"),
                         pagination:{
                             ...this.state.pagination,
                             total: v["total"],
@@ -297,7 +299,9 @@ class FreeFish extends React.Component {
                 subTitle="管理后台"
                 tags={<Tag color="green">正常</Tag>}
                 extra={[
-                    <span>页面刷新时间:</span>,
+                    <span>{`页面刷新时间:`}</span>,
+                    <Text mark>{`${this.state.refreshTime}`}</Text>,
+                    <span>刷新间隔(秒):</span>,
                     <Select defaultValue={`${this.state.refreshInterval/1000}s`} style={{ width: 120 }} onChange={(v)=>{
                         localStorage.setItem("refreshInterval", v);
                     }}>
