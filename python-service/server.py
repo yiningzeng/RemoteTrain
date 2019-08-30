@@ -369,8 +369,8 @@ def get_train_one():
                         "assetsDir"]).read().replace('\n', '')
                     if len(container_id) > 80:
                         container_id = "more than 80"
-                    elif len(container_id) < 64:
-                        container_id = "less 64"
+                    elif len(container_id) < 63:
+                        container_id = "less 63"
                     if "train_done" not in res:
                         log.info("训练有误: %s" % res)
                         draw_url = 'http://%s:%d/env/%s' % (ff.draw_host, ff.draw_port, train_info['projectId'])
