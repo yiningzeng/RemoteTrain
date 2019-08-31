@@ -156,7 +156,7 @@ if __name__ == '__main__':
     os.system("rm %s/*.data" % args.voc_dir)
     os.system("rm %s/*.txt" % args.voc_dir)
     val_count = int(os.popen("ls -l %s|grep _val.txt|wc -l" % args.voc_dir).read().replace('\n', ''))
-    set_files = glob.glob(args.voc_dir+'/ImageSets/Main/*.txt')
+    set_files = sorted(glob.glob(args.voc_dir+'/ImageSets/Main/*.txt'))
 
     for num, set in enumerate(set_files):
         fname, fename = os.path.splitext(os.path.split(set)[1])
