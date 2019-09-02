@@ -504,6 +504,13 @@ def do_train_http():
                      "providerType": data["providerType"],
                      "providerOptions": {"yolov3Image": data["image"]}
                      }
+        if data['providerType'] == 'fasterRcnn':
+            trainInfo["providerOptions"] = {"fasterRcnnImage": data["image"]}
+        elif data['providerType'] == 'maskRcnn':
+            trainInfo["providerOptions"] = {"maskRcnnImage": data["image"]}
+        elif data['providerType'] == 'other':
+            trainInfo["providerOptions"] = {"otherImage": data["image"]}
+
         do_basic_publish('ai.package.topic', "package.upload-done.%s" % data['projectName'], json.dumps(package_info))
         do_basic_publish('ai.train.topic', "train.start.%s" % data['projectName'], json.dumps(trainInfo))
         # region 更新数据库
@@ -593,7 +600,7 @@ if __name__ == '__main__':
                  package_base_path='/assets')
     # init(self, sql=True, sql_host='localhost', draw=True, draw_host='localhost', draw_port=8097):
     # sql: 是否开启数据库，sql_host：数据库地址，draw：是否开启画图，draw_host：画图的服务地址，draw_port：画图的服务端口
-    ff.init(sql_host='192.168.31.75', draw_host='192.168.31.75')
+    ff.init(sql=False, sql_host='192.168.31.75', draw_host='192.168.31.75')
 
     # 创建后台执行的 schedulers
     scheduler = BackgroundScheduler()
@@ -612,8 +619,8 @@ if __name__ == '__main__':
     end_date(datetime or str)   结束日期
     timezone(datetime.tzinfo or   str)  时区
     '''
-    scheduler.add_job(get_train_one, 'interval', minutes=5)
-    scheduler.add_job(get_package_one, 'interval', minutes=1)
+    scheduler.add_job(get_train_one, 'interval', minutes=10)
+    scheduler.add_job(get_package_one, 'interval', minutes=5)
 
     # scheduler.add_job(get_train_one, 'interval', seconds=10)
     # scheduler.add_job(get_package_one, 'interval', seconds=5)
