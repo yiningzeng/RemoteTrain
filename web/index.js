@@ -25,6 +25,7 @@ class FreeFish extends React.Component {
         leftVisible: false,
         rightVisible: false,
         doChangeAssetsDir: true,
+        baseImage: "darknet_auto-ai-power-v4.0",
         /*
         *  package_info = {"projectId": data["projectId"], "projectName": data["projectName"], "packageDir": data["packageDir"], "packageName": data["packageName"]}
         trainInfo = {"projectId": data["projectId"],
@@ -46,7 +47,7 @@ class FreeFish extends React.Component {
             assetsDir: undefined, // 素材文件夹，和packageDir相同
             assetsType: "pascalVoc", // 素材的类型，pascalVoc和coco和other
             providerType: "yolov3", // 框架的类型yolov3 fasterRcnn maskRcnn
-            image: "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v3.6", // 镜像路径
+            image: "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v4.0", // 镜像路径
         },
     };
 
@@ -379,7 +380,7 @@ class FreeFish extends React.Component {
                                 <br/>
                                 <Text mark>特别说明：需要填写的目录绝对区分大小写！！！，否则也是直接凉凉。</Text>
                             </Paragraph>
-                            <Title level={2}>以Yolov3示例：</Title>
+                            <Title level={2}>Yolov3示例：</Title>
                             <Paragraph>
                                 <ul>
                                     <li>
@@ -408,6 +409,53 @@ class FreeFish extends React.Component {
                                             <Text strong>ftp账号:</Text><Text code>ftpicubic</Text><br/>
                                             <Text strong>ftp密码:</Text><Text code>ftpicubic-123</Text><br/>
                                             比如你的Pascal Voc数据集的目录是<Text code>我是voc目录</Text>，那么你压缩打包的文件名是<Text code>我是voc目录.tar</Text><Text strong>你一定要记住，下一步中需要用到</Text>
+                                            通过上文提供的ftp地址上传文件到根目录，推荐使用<Text code>FileZilla</Text>客户端上传
+                                        </Paragraph>
+                                    </li>
+                                    <li>
+                                        <Title level={4}>4.恭喜你已经完成了所有的配置，只用把信息提交就行了</Title>
+                                        <Paragraph>
+                                            <Text strong>点页面右上角按钮</Text>
+                                            填写项目名和上一步的信息，其他如果没更新那直接默认。主要是镜像地址，使用前咨询开发
+                                        </Paragraph>
+                                    </li>
+                                    <li>
+                                        <Title level={4}>5.等着训练</Title>
+                                    </li>
+                                </ul>
+                            </Paragraph>
+
+                            <Title level={2}>Detectron示例：</Title>
+                            <Paragraph>
+                                <ul>
+                                    <li>
+                                        <Title level={4}>1.制作CoCo数据集</Title>
+                                        <Paragraph>
+                                            新建目录<Text mark>演示项目</Text>，在目录中放置数据集目录<Text mark>coco</Text>，区分大小写，注意这里是小写。
+                                            在目标检测中，主要用到了 coco/coco_val2014，coco/coco_train2014，coco/annotations
+                                            其中 coco/annotations 保存了标签数据， coco/coco_val2014，coco/coco_train2014 保存了图片内容。
+                                            在coco/annotations 文件夹中 , instances_train2014.json为训练的数据集，instances_minival2014.json为测试的数据集。
+                                        </Paragraph>
+                                    </li>
+                                    <li>
+                                        <Title level={4}>2.在CoCo数据集的根目录下新建配置文件</Title>
+                                        <Paragraph>
+                                            <Text mark>project_id.log</Text> 里面存写项目名，和画图主窗口有关<br/>
+                                            新建文件<Text mark>train_log/convert_data.log</Text> 如果文件夹不存在直接创建<br/>
+                                            <Text mark><a target="view_window" href="https://github.com/yiningzeng/RemoteTrain/blob/master/config-template/train-config.yaml">
+                                                train-config.yaml</a></Text><br/>
+                                            配置
+                                            <Text mark>train-config.yaml</Text>说明:<br/>
+                                            需要更改<Text code>NUM_CLASSES: 实际目标的数目+1</Text>和<Text code>NUM_GPUS: 训练需要使用的GPU数量</Text>，注意:后有空格
+                                            <br/>
+                                        </Paragraph>
+                                    </li>
+                                    <li>
+                                        <Title level={4}>3.打包文件夹并上传</Title>
+                                        <Paragraph>
+                                            <Text strong>ftp账号:</Text><Text code>ftpicubic</Text><br/>
+                                            <Text strong>ftp密码:</Text><Text code>ftpicubic-123</Text><br/>
+                                            比如你的项目目录是<Text code>演示项目</Text>，那么你压缩打包的文件名是<Text code>演示项目.tar</Text><Text strong>你一定要记住，下一步中需要用到</Text>
                                             通过上文提供的ftp地址上传文件到根目录，推荐使用<Text code>FileZilla</Text>客户端上传
                                         </Paragraph>
                                     </li>
@@ -520,7 +568,16 @@ class FreeFish extends React.Component {
                             <Option value="other">other</Option>
                         </Select>
                         使用的框架:
-                        <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}} defaultValue="yolov3" onChange={(value)=>this.setState({doTrain: {...this.state.doTrain,providerType: value}})}>
+                        <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}} defaultValue="yolov3" onChange={(value)=>{
+                            console.log("providerType"+value);
+                            if (value === "yolov3") {
+                                this.setState({...this.state,baseImage: "darknet_auto-ai-power-v4.0",doTrain: {...this.state.doTrain,providerType: value}});
+                            } else if (value === "fasterRcnn") {
+                                this.setState({...this.state,baseImage: "ai-power-wo-auto-v4.2",doTrain: {...this.state.doTrain,providerType: value}});
+                            } else if (value === "maskRcnn") {
+                                this.setState({...this.state,baseImage: "ai-power-wo-auto-v4.2",doTrain: {...this.state.doTrain,providerType: value}});
+                            }
+                        }}>
                             <Option value="yolov3">yolov3</Option>
                             <Option value="fasterRcnn">fasterRcnn</Option>
                             <Option value="maskRcnn">maskRcnn</Option>
@@ -528,7 +585,7 @@ class FreeFish extends React.Component {
                         </Select>
                         镜像地址:
                         <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="tar压缩包名" addonBefore="registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:"
-                               defaultValue="darknet_auto-ai-power-v3.6" allowClear
+                               defaultValue={this.state.baseImage} value={this.state.baseImage} allowClear
                                onChange={(e)=>this.setState({doTrain: {...this.state.doTrain,image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:${e.target.value}`}})}/>
                         <div
                             style={{
