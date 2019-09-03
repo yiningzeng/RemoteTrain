@@ -9,4 +9,4 @@ sudo  docker run \
             --add-host service-ftp:10.10.0.2 \
             --add-host service-web:10.10.0.5 \
             --restart=always \
-            -d registry.cn-hangzhou.aliyuncs.com/baymin/remote-train:web-v3.4
+            -d registry.cn-hangzhou.aliyuncs.com/baymin/remote-train:web-v3.5
