@@ -571,11 +571,33 @@ class FreeFish extends React.Component {
                         <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}} defaultValue="yolov3" onChange={(value)=>{
                             console.log("providerType"+value);
                             if (value === "yolov3") {
-                                this.setState({...this.state,baseImage: "darknet_auto-ai-power-v4.0",doTrain: {...this.state.doTrain,providerType: value}});
+                                this.setState({
+                                        ...this.state,
+                                        baseImage: "darknet_auto-ai-power-v4.0",
+                                        doTrain: {
+                                            ...this.state.doTrain,
+                                            providerType: value,
+                                            image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v4.0`
+                                        }
+                                });
                             } else if (value === "fasterRcnn") {
-                                this.setState({...this.state,baseImage: "ai-power-wo-auto-v4.2",doTrain: {...this.state.doTrain,providerType: value}});
+                                this.setState({
+                                        ...this.state,
+                                        baseImage: "ai-power-wo-auto-v4.2",
+                                        doTrain: {
+                                            ...this.state.doTrain,
+                                            providerType: value,
+                                            image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-auto-v4.2`}
+                                });
                             } else if (value === "maskRcnn") {
-                                this.setState({...this.state,baseImage: "ai-power-wo-auto-v4.2",doTrain: {...this.state.doTrain,providerType: value}});
+                                this.setState({
+                                    ...this.state,
+                                    baseImage: "ai-power-wo-auto-v4.2",
+                                    doTrain: {
+                                        ...this.state.doTrain,
+                                        providerType: value,
+                                        image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-auto-v4.2`}
+                                });
                             }
                         }}>
                             <Option value="yolov3">yolov3</Option>
