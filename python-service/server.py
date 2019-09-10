@@ -53,8 +53,8 @@ class pikaqiu(object):
     def __init__(self, root_password='icubic-123', host='localhost', port=5672,
                  username='guest', password='guest', package_base_path='/home/baymin/daily-work/ftp/',
                  train_exchange='ai.train.topic', train_queue='ai.train.topic-queue', train_routing_key='train.start.#',
-                 package_exchange='ai.package.topic', package_queue='ai.package.topic-queue',
-                 package_routing_key='package.upload-done.#'
+                 test_exchange='ai.test.topic', test_queue='ai.test.topic-queue', test_routing_key='test.start.#',
+                 package_exchange='ai.package.topic', package_queue='ai.package.topic-queue', package_routing_key='package.upload-done.#'
                  ):
         self.package_base_path = package_base_path
         self.root_password = root_password
@@ -73,6 +73,11 @@ class pikaqiu(object):
         self.train_exchange = train_exchange
         self.train_queue = train_queue
         self.train_routing_key = train_routing_key
+        # endregion
+        # region 测试队列参数
+        self.test_exchange = test_exchange
+        self.test_queue = test_queue
+        self.test_routing_key = test_routing_key
         # endregion
         # region 训练素材包队列参数
         self.package_exchange = package_exchange
@@ -196,6 +201,11 @@ class pikaqiu(object):
             channel.queue_declare(self.train_queue, passive=True, durable=True)
             channel.queue_bind(self.train_queue, self.train_exchange, self.train_routing_key)
             # endregion
+            # region创建测试队列
+            channel.exchange_declare(self.test_exchange, "topic", passive=True, durable=True)
+            channel.queue_declare(self.test_queue, passive=True, durable=True)
+            channel.queue_bind(self.test_queue, self.test_exchange, self.test_routing_key)
+            # endregion
             # region创建训练素材解包队列
             channel.exchange_declare(self.package_exchange, "topic", passive=True, durable=True)
             channel.queue_declare(self.package_queue, passive=True, durable=True)
@@ -207,6 +217,12 @@ class pikaqiu(object):
             channel.exchange_declare(self.train_exchange, "topic", durable=True)
             channel.queue_declare(self.train_queue)
             channel.queue_bind(self.train_queue, self.train_exchange, self.train_routing_key)
+            # endregion
+            # region创建训练队列
+            channel = connection.channel()
+            channel.exchange_declare(self.test_exchange, "topic", durable=True)
+            channel.queue_declare(self.test_queue)
+            channel.queue_bind(self.test_queue, self.test_exchange, self.test_routing_key)
             # endregion
             # region创建训练素材解包队列
             channel = connection.channel()
@@ -442,6 +458,59 @@ def get_train_one():
     return method_frame.delivery_tag, body.decode('utf-8')
 
 
+# 获取单个训练队列数据
+def get_test_one():
+    log.info('get_test_one:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+    connection, channel, method_frame, header_frame, body = do_basic_get(queue=ff.test_queue)
+    if method_frame is None:
+        return None, None
+    else:
+        test_info = json.loads(body.decode('utf-8'))
+        testing = int(os.popen("echo %s | sudo -S docker ps -a | grep %s |wc -l" % (ff.root_password, "power-ai-testing")).read().replace('\n', ''))
+        if testing == 0:
+            if not os.path.exists("%s/%s/test_status" % (ff.package_base_path, test_info["assetsDir"])):
+                os.system("echo '等待检测\c' > '%s/%s/test_status'" %
+                          (ff.package_base_path, test_info["assetsDir"]))
+                channel.basic_nack(method_frame.delivery_tag)
+            else:
+                status = os.popen("cat '%s/%s/test_status' | head -n 1" %
+                                  (ff.package_base_path, test_info["assetsDir"])).read().replace('\n', '')
+                if "等待检测" in status:
+                    channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
+                    image_url = None
+                    docker_volume = None
+                    if test_info['providerType'] == 'yolov3':
+                        docker_volume = "/darknet/assets"
+                    elif test_info['providerType'] == 'fasterRcnn':
+                        docker_volume = "/Detectron/detectron/datasets/data"
+                    elif test_info['providerType'] == 'maskRcnn':
+                        docker_volume = "/Detectron/detectron/datasets/data"
+                    elif test_info['providerType'] == 'other':
+                        docker_volume = test_info['providerOptions']['docker_volume']
+                    train_cmd = "dockertrain -n 'Power-Ai-%s' -v '%s' -w '%s' -t 2 -r '%s' -f '%s' -d '%s'" % \
+                                (test_info["projectId"],
+                                 ff.package_base_path + "/" + test_info["assetsDir"],
+                                 ff.root_password,
+                                 image_url,
+                                 test_info['providerType'],
+                                 docker_volume)
+                    log.info("\n\n**************************\n测试的命令: %s\n**************************\n" % train_cmd)
+                elif "正在测试" in status:
+                    channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
+                elif "测试失败" in status:
+                    channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
+                elif "测试完成" in status:
+                    os.system("echo %s | sudo -S chmod -R 777 %s/%s" % (ff.root_password, ff.package_base_path, test_info["assetsDir"]))
+                    os.system("rm %s/%s/test_status" % (ff.package_base_path, test_info["assetsDir"]))
+                    os.system("tar -C %s -cf %s/%s.tar infer" % (ff.package_base_path + "/" + test_info["assetsDir"],
+                                                                 ff.package_base_path + "/" + test_info["assetsDir"],
+                                                                 test_info["assetsDir"] + "检测结果"))
+                    os.system("rm -r %s/%s/infer" % (ff.package_base_path, test_info["assetsDir"]))
+                    channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
+    connection.close()
+    return method_frame.delivery_tag, body.decode('utf-8')
+
+
 @app.route('/power-ai-train', methods=['POST'])
 def do_power_ai_train_http():
     data = request.json  # 获取 JOSN 数据
@@ -595,8 +664,12 @@ if __name__ == '__main__':
     # print(id)
 
     # channel = connection.channel()
-
-    ff = pikaqiu(root_password='icubic-123', host='192.168.31.75', username='baymin', password='baymin1024',
+    debug = False
+    if debug:
+        ff = pikaqiu(root_password='baymin1024', host='192.168.31.157', username='baymin', password='baymin1024',
+                     package_base_path='/assets')
+    else:
+        ff = pikaqiu(root_password='icubic-123', host='192.168.31.75', username='baymin', password='baymin1024',
                  package_base_path='/assets')
     # init(self, sql=True, sql_host='localhost', draw=True, draw_host='localhost', draw_port=8097):
     # sql: 是否开启数据库，sql_host：数据库地址，draw：是否开启画图，draw_host：画图的服务地址，draw_port：画图的服务端口
@@ -619,10 +692,14 @@ if __name__ == '__main__':
     end_date(datetime or str)   结束日期
     timezone(datetime.tzinfo or   str)  时区
     '''
-    scheduler.add_job(get_train_one, 'interval', minutes=10)
-    scheduler.add_job(get_package_one, 'interval', minutes=5)
-
-    # scheduler.add_job(get_train_one, 'interval', seconds=10)
+    if debug:
+        scheduler.add_job(get_train_one, 'interval', minutes=10000)
+        scheduler.add_job(get_package_one, 'interval', minutes=5000)
+        scheduler.add_job(get_test_one, 'interval', seconds=5)
+    else:
+        scheduler.add_job(get_train_one, 'interval', minutes=10)
+        scheduler.add_job(get_package_one, 'interval', minutes=5)
+        scheduler.add_job(get_test_one, 'interval', seconds=5)
     # scheduler.add_job(get_package_one, 'interval', seconds=5)
     scheduler.start()
 
