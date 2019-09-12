@@ -16,3 +16,17 @@ export async function doTrain(params) {
         body: params
     });
 }
+
+export async function getModelList(params) {
+    return request(`http://${ip}/get_model_list/${params}`, {
+        method: 'GET',
+    });
+}
+
+export async function startTest(params) {
+    return request(`http://${ip}/start_test`, {
+        method: 'POST',
+        body: params
+    });
+}
+

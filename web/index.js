@@ -3,12 +3,12 @@ import ReactDOM from 'react-dom';
 import Iframe from 'react-iframe';
 
 import dva, { connect } from 'dva';
-import { Tag, Row, Col, Table, message, PageHeader, Button, Typography, Drawer, Divider, Icon, Card , Select, Switch, Form, Input, DatePicker} from 'antd';
+import { Tag, Row, Modal, Spin, Col, Table, message, PageHeader, Button, Typography, Drawer, Divider, Icon, Card , Select, Switch, Form, Input, DatePicker} from 'antd';
 // 由于 antd 组件的默认文案是英文，所以需要修改为中文
 import zhCN from 'antd/lib/locale-provider/zh_CN';
 import moment from 'moment';
 import 'moment/locale/zh-cn';
-import { getList, doTrain } from './services/api';
+import { getList, getModelList, doTrain, startTest } from './services/api';
 const { Title, Paragraph, Text } = Typography;
 const { Option } = Select;
 const InputGroup = Input.Group;
@@ -16,6 +16,20 @@ moment.locale('zh-cn');
 
 class FreeFish extends React.Component {
     state = {
+        test: {
+            baseImage: "darknet_auto_test-service-ai-power-v5.0",
+            showTestDrawer: false,
+            showTestDrawerUrl: "",
+            showTestModal: false,
+            loading: false,
+            tips: "载入可使用的权重文件... ",
+            doTest: {
+                providerType: "yolov3",
+                assetsDir: "", //nowAssetsDir
+                weights: "yolov3-voc_last.weights",
+                image: "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto_test-service-ai-power-v5.0",
+            },
+        },
         timer: null,
         refreshInterval: localStorage.getItem("refreshInterval") === null?30000:localStorage.getItem("refreshInterval"),
         refreshTime: moment().format("YYYY-MM-DD HH:mm:ss"),
@@ -152,7 +166,7 @@ class FreeFish extends React.Component {
 
     render() {
         const {
-            service: { trains: { list }}
+            service: {trains: {list}, modelList}
         } = this.props;
         // let filters = keylist.data.map(function(item){
         //     return {text: `[${item["status"]===1?"开启":"关闭"}] ${item["key"]}`, value: item["id"]};
@@ -184,8 +198,8 @@ class FreeFish extends React.Component {
         }, {
             title: '是否插队',
             dataIndex: 'is_jump',
-            render: v =>{
-                if(v === 1) return <Tag color="#2db7f5">插队</Tag>;
+            render: v => {
+                if (v === 1) return <Tag color="#2db7f5">插队</Tag>;
                 else return <Tag>正常</Tag>;
             }
         }, {
@@ -199,17 +213,17 @@ class FreeFish extends React.Component {
                 // 1:解包完成
                 // 2:正在训练
                 // 3:训练完成
-                if(v === 0) return <Tag color="#A9A9A9">等待解包</Tag>;
-                else if(v === 1) return  <Tag color="#f50">解包完成</Tag>;
-                else if(v === 2) return  <Button type="danger" loading>正在训练</Button>;
-                else if(v === 3) return  <div><Tag color="#008000">训练完成</Tag><Icon type="smile" theme="twoTone" /></div>;
-                else if(v === -1) return  <Tag color="#708090">训练出错</Tag>;
-                else return  <Tag>未知</Tag>;
+                if (v === 0) return <Tag color="#A9A9A9">等待解包</Tag>;
+                else if (v === 1) return <Tag color="#f50">解包完成</Tag>;
+                else if (v === 2) return <Button type="danger" loading>正在训练</Button>;
+                else if (v === 3) return <div><Tag color="#008000">训练完成</Tag><Icon type="smile" theme="twoTone"/></div>;
+                else if (v === -1) return <Tag color="#708090">训练出错</Tag>;
+                else return <Tag>未知</Tag>;
             }
         }];
 
 
-        const { selectedRowKeys } = this.state;
+        const {selectedRowKeys} = this.state;
         const rowSelection = {
             selectedRowKeys,
             onChange: this.onSelectChange,
@@ -233,7 +247,7 @@ class FreeFish extends React.Component {
                         }
                         return true;
                     });
-                    this.setState({...this.state, selectedRowKeys: newSelectedRowKeys });
+                    this.setState({...this.state, selectedRowKeys: newSelectedRowKeys});
                 },
             }, {
                 key: 'even',
@@ -246,12 +260,12 @@ class FreeFish extends React.Component {
                         }
                         return false;
                     });
-                    this.setState({ selectedRowKeys: newSelectedRowKeys });
+                    this.setState({selectedRowKeys: newSelectedRowKeys});
                 },
             }],
             onSelection: this.onSelection,
         };
-        const Description = ({ term, children, span = 12 }) => (
+        const Description = ({term, children, span = 12}) => (
             <Col span={span}>
                 <div className="description">
                     <div className="term">{term}</div>
@@ -281,7 +295,7 @@ class FreeFish extends React.Component {
                     <a href="ftp://192.168.31.75:21/" target="view_window">ftp://192.168.31.75/</a>
                 </Description>
                 {/*<Description term="Remarks" span={24}>*/}
-                    {/*我是数艘模式打开的年四季度拉上你的空间按时刻把数据库但是当你什么的女生看*/}
+                {/*我是数艘模式打开的年四季度拉上你的空间按时刻把数据库但是当你什么的女生看*/}
                 {/*</Description>*/}
             </Row>
         );
@@ -289,7 +303,7 @@ class FreeFish extends React.Component {
         const extraContent = (
             <Row>
                 <Button type="danger" size="large" onClick={this.showLeftDrawer}>
-                   使用前看我
+                    使用前看我
                 </Button>
             </Row>
         );
@@ -303,19 +317,20 @@ class FreeFish extends React.Component {
                     <span>{`页面刷新时间:`}</span>,
                     <Text mark>{`${this.state.refreshTime}`}</Text>,
                     <span>刷新间隔(秒):</span>,
-                    <Select defaultValue={`${this.state.refreshInterval/1000}s`} style={{ width: 120 }} onChange={(v)=>{
-                        localStorage.setItem("refreshInterval", v);
-                    }}>
+                    <Select defaultValue={`${this.state.refreshInterval / 1000}s`} style={{width: 120}}
+                            onChange={(v) => {
+                                localStorage.setItem("refreshInterval", v);
+                            }}>
                         <Option value="5000">5s</Option>
                         <Option value="10000">10s</Option>
                         <Option value="30000">30s</Option>
                         <Option value="60000">60s</Option>
                     </Select>,
-                    <Button key="1" type="primary" onClick={()=>{
+                    <Button key="1" type="primary" onClick={() => {
                         this.setState({
                             rightVisible: true,
                             leftVisible: true,
-                            doTrain:{
+                            doTrain: {
                                 ...this.state.doTrain,
                                 projectId: moment().format('x')
                             }
@@ -325,15 +340,54 @@ class FreeFish extends React.Component {
                     </Button>,
                 ]}
                 footer={
-                    <Table size={"small"} rowSelection={rowSelection} columns={columns} dataSource={list} onChange={this.handleTableChange}
+                    <Table size={"small"} rowSelection={rowSelection} columns={columns} dataSource={list}
+                           onChange={this.handleTableChange}
                            expandedRowRender={record => {
-                               return(
+                               return (
                                    <Row style={{marginLeft: 50}}>
                                        <Row>
-                                           <Switch style={{marginTop: -3}} checkedChildren="插队开" unCheckedChildren="插队关" disabled={record.is_jump === 1} defaultChecked={record.is_jump === 1} onChange={(c)=>{message.success(`待完善， ${c}`)}}/>
-                                           <Button type="primary" size="small" style={{marginLeft: 10}} disabled={record.status !== 2}>停止训练</Button>
-                                           <Button type="primary" size="small" style={{marginLeft: 10}} disabled={record.status !== 2}>继续训练</Button>
-                                           <Button type="primary" size="small" style={{marginLeft: 10}}>打开测试端口</Button>
+                                           <Switch style={{marginTop: -3}} checkedChildren="插队开" unCheckedChildren="插队关"
+                                                   disabled={record.is_jump === 1} defaultChecked={record.is_jump === 1}
+                                                   onChange={(c) => {
+                                                       message.success(`待完善， ${c}`)
+                                                   }}/>
+                                           <Button type="primary" size="small" style={{marginLeft: 10}}
+                                                   disabled={record.status !== 2}>停止训练</Button>
+                                           <Button type="primary" size="small" style={{marginLeft: 10}}
+                                                   disabled={record.status !== 2}>继续训练</Button>
+                                           <Button type="primary" size="small" style={{marginLeft: 10}} onClick={() => {
+                                               this.setState(
+                                                   {
+                                                       ...this.state,
+                                                       test: {
+                                                           ...this.state.test,
+                                                           loading: true,
+                                                           showTestModal: true,
+                                                       }
+                                                   },
+                                                   () => {
+                                                       const {dispatch} = this.props;
+                                                       dispatch({
+                                                           type: 'service/getModelList',
+                                                           payload: encodeURI(record.assets_directory_name),
+                                                           callback: (v) => {
+                                                               this.setState({
+                                                                   ...this.state,
+                                                                   test: {
+                                                                       ...this.state.test,
+                                                                       loading: false,
+                                                                       showTestModal: true,
+                                                                       doTest: {
+                                                                           ...this.state.test.doTest,
+                                                                           providerType: record.net_framework,
+                                                                           assetsDir: record.assets_directory_name, //nowAssetsDir
+                                                                       }
+                                                                   }
+                                                               });
+                                                           },
+                                                       });
+                                                   });
+                                           }}>打开测试端口</Button>
                                            <Button type="primary" size="small" style={{marginLeft: 10}}>日志</Button>
                                        </Row>
                                        <Row>
@@ -348,7 +402,8 @@ class FreeFish extends React.Component {
                                                    className="myClassname"
                                                    display="initial"
                                                    position="relative"/>
-                                           <a href={record.url} target="view_window" style={{ margin: 0 }}>{record.description}</a>
+                                           <a href={record.url} target="view_window"
+                                              style={{margin: 0}}>{record.description}</a>
                                        </Row>
                                    </Row>
                                )
@@ -358,6 +413,130 @@ class FreeFish extends React.Component {
                 }
             >
                 <div className="wrap">
+
+                    <Modal
+                        title="参数设置"
+                        okText="打开测试服务"
+                        cancelText="取消"
+                        width={1000}
+                        visible={this.state.test.showTestModal}
+                        onOk={() => {
+                            const {dispatch} = this.props;
+                            this.setState({
+                                    ...this.state,
+                                    test: {
+                                        ...this.state.test,
+                                        tips: "正在打开服务",
+                                        // showTestModal: false,
+                                        loading: true,
+                                    }
+                                },
+                                () => {
+                                    dispatch({
+                                        type: 'service/startTest',
+                                        payload: {
+                                            ...this.state.test.doTest
+                                        },
+                                        callback: (v) => {
+                                            this.setState({
+                                                ...this.state,
+                                                test: {
+                                                    ...this.state.test,
+                                                    showTestDrawer: true,
+                                                    showTestModal: false,
+                                                    showTestDrawerUrl: `/test?port=8100&assets=${this.state.test.nowAssetsDir}`,
+                                                }
+                                            })
+                                            // const tempwindow=window.open();
+                                            // tempwindow.location=`/test?port=8100&assets=${this.state.test.nowAssetsDir}`;
+                                            // window.open(`/test?port=8100&assets=${this.state.test.nowAssetsDir}`, "_blank");
+                                            // window.open(`/test?port=8100&assets=${this.state.test.nowAssetsDir}`, "_blank", "scrollbars=yes,resizable=1,modal=false,alwaysRaised=yes");
+                                        }});
+                                });
+                        }}
+                        onCancel={() => {
+                            this.setState({
+                                ...this.state,
+                                test: {
+                                    ...this.state.test,
+                                    showTestModal: false,
+                                }
+                            });
+                        }}
+                        okButtonProps={{disabled: false}}
+                        cancelButtonProps={{disabled: false}}
+                    >
+                        <Spin spinning={this.state.test.loading} tip={this.state.test.tips} delay={500}>
+                            选择加载的权重文件:
+                            <Select style={{width: '100%', marginTop: "10px", marginBottom: "20px"}}
+                                    onChange={(v)=>{
+                                        this.setState({
+                                            ...this.state,
+                                            test: {
+                                                ...this.state.test,
+                                                doTest: {
+                                                    ...this.state.test.doTest,
+                                                    weights: v
+                                                }
+                                            }
+                                        });
+                                    }}>
+                                {modelList.weights_list.map(d => (
+                                    <Option key={d.path}>{d.filename}</Option>
+                                ))}
+                            </Select>
+                            镜像地址:
+                            <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="tar压缩包名"
+                                   addonBefore="registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:"
+                                   defaultValue={this.state.test.baseImage} allowClear
+                                   onChange={(e) => this.setState({
+                                       ...this.state,
+                                       test: {
+                                           ...this.state.test,
+                                           doTest: {
+                                               ...this.state.test.doTest,
+                                               image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:${e.target.value}`
+                                           }
+
+                                       }
+                                   })}/>
+                        </Spin>
+                    </Modal>
+
+                    <Drawer
+                        title="在线测试"
+                        placement="bottom"
+                        width="100%"
+                        height="100%"
+                        closable={true}
+                        onClose={()=>{this.setState({
+                            ...this.state,
+                            test: {
+                                ...this.state.test,
+                                showTestDrawer: false,
+                            }
+                        })}}
+                        visible={this.state.test.showTestDrawer}
+                    >
+                        <Iframe url={"http://192.168.31.75/test/?port=8100#/"}
+                                width="100%"
+                                height="800px"
+                                id="myId"
+                                frameBorder={0}
+                                className="myClassname"
+                                display="initial"
+                                position="relative"/>
+                        {/*<Iframe url={this.state.test.showTestDrawerUrl}*/}
+                                {/*width="100%"*/}
+                                {/*height="500px"*/}
+                                {/*id="myId"*/}
+                                {/*frameBorder={0}*/}
+                                {/*className="myClassname"*/}
+                                {/*display="initial"*/}
+                                {/*position="relative"/>*/}
+                    </Drawer>
+
+
                     <Drawer
                         title="新增训练(非Power-ai)-使用教程"
                         placement="left"
@@ -369,10 +548,11 @@ class FreeFish extends React.Component {
                         <Typography>
                             <Title>介绍</Title>
                             <Paragraph>
-                               远程训练系统，支持通过Power-Ai标完图直接训练，还支持手动训练其他数据和各种框架。由于软件里集成度高，几乎实现傻瓜式的配置。所以这里主要介绍怎么使用手动训练
+                                远程训练系统，支持通过Power-Ai标完图直接训练，还支持手动训练其他数据和各种框架。由于软件里集成度高，几乎实现傻瓜式的配置。所以这里主要介绍怎么使用手动训练
                             </Paragraph>
                             <Paragraph>
-                                由于不通框架训练使用的方式也不一样，本系统主要基于docker实现训练，目前提供3种自动化集成度高的框架。<Text mark>Yolov3</Text>和<Text mark>FasterRcnn</Text>和<Text mark>MaskRcnn</Text>，
+                                由于不通框架训练使用的方式也不一样，本系统主要基于docker实现训练，目前提供3种自动化集成度高的框架。<Text mark>Yolov3</Text>和<Text
+                                mark>FasterRcnn</Text>和<Text mark>MaskRcnn</Text>，
                                 当然有其他集成度较高的框架也可以通过镜像直接加载。
                             </Paragraph>
                             <Paragraph>
@@ -388,17 +568,21 @@ class FreeFish extends React.Component {
                                         <Paragraph>
                                             在目标检测中，主要用到了 Annotations，ImageSets，JPEGImages
                                             其中 ImageSets/Main/ 保存了具体数据集的索引，Annotations 保存了标签数据， JPEGImages 保存了图片内容。
-                                            ImageSets/Main/ 文件夹以 , $class$_train.txt $class$_val.txt的格式命名。 train.txt val.txt 例外，可以没有
+                                            ImageSets/Main/ 文件夹以 , $class$_train.txt $class$_val.txt的格式命名。 train.txt
+                                            val.txt 例外，可以没有
                                         </Paragraph>
                                     </li>
                                     <li>
                                         <Title level={4}>2.在Pascal Voc数据集的根目录下新建配置文件
-                                            <Text mark><a target="view_window" href="https://github.com/yiningzeng/darknet-license/blob/master/remote_train/yolov3-voc.cfg">yolov3-voc.cfg</a></Text>
-                                            和<Text mark><a target="view_window" href="https://github.com/yiningzeng/darknet-license/blob/master/remote_train/use_gpus">use_gpus</a></Text></Title>
+                                            <Text mark><a target="view_window"
+                                                          href="https://github.com/yiningzeng/darknet-license/blob/master/remote_train/yolov3-voc.cfg">yolov3-voc.cfg</a></Text>
+                                            和<Text mark><a target="view_window"
+                                                           href="https://github.com/yiningzeng/darknet-license/blob/master/remote_train/use_gpus">use_gpus</a></Text></Title>
                                         <Paragraph>
                                             如果使用服务器来训练的话，两个配置文件都不需要改动<br/>
                                             配置文件:<br/>
-                                            <Text mark>yolov3-voc.cfg</Text>只需要更改<Text code>batch=68</Text>和<Text code>subdivisions=32</Text>，一般情况不用更改
+                                            <Text mark>yolov3-voc.cfg</Text>只需要更改<Text code>batch=68</Text>和<Text
+                                            code>subdivisions=32</Text>，一般情况不用更改
                                             <br/>
                                             <Text mark>use_gpus</Text>只是需要使用的显卡的id号通过英文<Text code>,</Text>来拼接
                                         </Paragraph>
@@ -408,7 +592,8 @@ class FreeFish extends React.Component {
                                         <Paragraph>
                                             <Text strong>ftp账号:</Text><Text code>ftpicubic</Text><br/>
                                             <Text strong>ftp密码:</Text><Text code>ftpicubic-123</Text><br/>
-                                            比如你的Pascal Voc数据集的目录是<Text code>我是voc目录</Text>，那么你压缩打包的文件名是<Text code>我是voc目录.tar</Text><Text strong>你一定要记住，下一步中需要用到</Text>
+                                            比如你的Pascal Voc数据集的目录是<Text code>我是voc目录</Text>，那么你压缩打包的文件名是<Text
+                                            code>我是voc目录.tar</Text><Text strong>你一定要记住，下一步中需要用到</Text>
                                             通过上文提供的ftp地址上传文件到根目录，推荐使用<Text code>FileZilla</Text>客户端上传
                                         </Paragraph>
                                     </li>
@@ -434,7 +619,8 @@ class FreeFish extends React.Component {
                                             新建目录<Text mark>演示项目</Text>，在目录中放置数据集目录<Text mark>coco</Text>，区分大小写，注意这里是小写。
                                             在目标检测中，主要用到了 coco/coco_val2014，coco/coco_train2014，coco/annotations
                                             其中 coco/annotations 保存了标签数据， coco/coco_val2014，coco/coco_train2014 保存了图片内容。
-                                            在coco/annotations 文件夹中 , instances_train2014.json为训练的数据集，instances_minival2014.json为测试的数据集。
+                                            在coco/annotations 文件夹中 ,
+                                            instances_train2014.json为训练的数据集，instances_minival2014.json为测试的数据集。
                                         </Paragraph>
                                     </li>
                                     <li>
@@ -442,11 +628,13 @@ class FreeFish extends React.Component {
                                         <Paragraph>
                                             <Text mark>project_id.log</Text> 里面存写项目名，和画图主窗口有关<br/>
                                             新建文件<Text mark>train_log/convert_data.log</Text> 如果文件夹不存在直接创建<br/>
-                                            <Text mark><a target="view_window" href="https://github.com/yiningzeng/RemoteTrain/blob/master/config-template/train-config.yaml">
+                                            <Text mark><a target="view_window"
+                                                          href="https://github.com/yiningzeng/RemoteTrain/blob/master/config-template/train-config.yaml">
                                                 train-config.yaml</a></Text><br/>
                                             配置
                                             <Text mark>train-config.yaml</Text>说明:<br/>
-                                            需要更改<Text code>NUM_CLASSES: 实际目标的数目+1</Text>和<Text code>NUM_GPUS: 训练需要使用的GPU数量</Text>，注意:后有空格
+                                            需要更改<Text code>NUM_CLASSES: 实际目标的数目+1</Text>和<Text code>NUM_GPUS:
+                                            训练需要使用的GPU数量</Text>，注意:后有空格
                                             <br/>
                                         </Paragraph>
                                     </li>
@@ -455,7 +643,8 @@ class FreeFish extends React.Component {
                                         <Paragraph>
                                             <Text strong>ftp账号:</Text><Text code>ftpicubic</Text><br/>
                                             <Text strong>ftp密码:</Text><Text code>ftpicubic-123</Text><br/>
-                                            比如你的项目目录是<Text code>演示项目</Text>，那么你压缩打包的文件名是<Text code>演示项目.tar</Text><Text strong>你一定要记住，下一步中需要用到</Text>
+                                            比如你的项目目录是<Text code>演示项目</Text>，那么你压缩打包的文件名是<Text code>演示项目.tar</Text><Text
+                                            strong>你一定要记住，下一步中需要用到</Text>
                                             通过上文提供的ftp地址上传文件到根目录，推荐使用<Text code>FileZilla</Text>客户端上传
                                         </Paragraph>
                                     </li>
@@ -480,7 +669,7 @@ class FreeFish extends React.Component {
                         width="50%"
                         closable={false}
                         maskClosable={false}
-                        onClose={()=>{
+                        onClose={() => {
                             this.setState({
                                 rightVisible: false,
                                 leftVisible: false,
@@ -500,11 +689,11 @@ class FreeFish extends React.Component {
                         {/*},*/}
                         接口地址:
                         <InputGroup style={{marginTop: "10px", marginBottom: "20px"}} compact>
-                            <Input style={{ width: '50%' }} addonBefore="http://" value={this.state.api.url}
-                                   onChange={e=>{
+                            <Input style={{width: '50%'}} addonBefore="http://" value={this.state.api.url}
+                                   onChange={e => {
                                        this.setState({
                                            ...this.state,
-                                           api:{
+                                           api: {
                                                ...this.state.api,
                                                url: e.target.value,
                                            }
@@ -521,94 +710,123 @@ class FreeFish extends React.Component {
                                 placeholder=":"
                                 disabled
                             />
-                            <Input style={{ width: '10%', textAlign: 'center', borderLeft: 0 }} value={this.state.api.port} onChange={(e)=>{
+                            <Input style={{width: '10%', textAlign: 'center', borderLeft: 0}}
+                                   value={this.state.api.port} onChange={(e) => {
                                 this.setState({
                                     ...this.state,
-                                    api:{
+                                    api: {
                                         ...this.state.api,
                                         port: e.target.value,
                                     }
                                 });
-                            }} defaultValue={this.state.apiPort} placeholder="port" />
-                            <Button type="primary" onClick={()=>{
+                            }} defaultValue={this.state.apiPort} placeholder="port"/>
+                            <Button type="primary" onClick={() => {
                                 localStorage.setItem("api.url", this.state.api.url);
                                 localStorage.setItem("api.port", this.state.api.port);
                                 message.success("保存成功");
                             }}>保存接口</Button>
                         </InputGroup>
                         项目ID:
-                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="项目ID" value={this.state.doTrain.projectId}
-                               allowClear onChange={(e)=>this.setState({doTrain: {...this.state.doTrain,projectId: e.target.value}})}/>
+                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="项目ID"
+                               value={this.state.doTrain.projectId}
+                               allowClear onChange={(e) => this.setState({
+                            doTrain: {
+                                ...this.state.doTrain,
+                                projectId: e.target.value
+                            }
+                        })}/>
                         项目名:
                         <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="项目名"
-                               allowClear onChange={(e)=>this.setState({doTrain: {...this.state.doTrain,projectName: e.target.value}})}/>
+                               allowClear onChange={(e) => this.setState({
+                            doTrain: {
+                                ...this.state.doTrain,
+                                projectName: e.target.value
+                            }
+                        })}/>
                         tar压缩包名:
                         <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="tar压缩包名" addonAfter=".tar"
-                               allowClear onChange={(e)=>this.setState({
-                                doTrain: {
-                                    ...this.state.doTrain,
-                                    packageName: `${e.target.value}.tar`,
-                                    packageDir: this.state.doChangeAssetsDir?e.target.value:this.state.doTrain.packageDir,
-                                    assetsDir: this.state.doChangeAssetsDir?e.target.value:this.state.doTrain.assetsDir,
-                                }
-                               })}/>
+                               allowClear onChange={(e) => this.setState({
+                            doTrain: {
+                                ...this.state.doTrain,
+                                packageName: `${e.target.value}.tar`,
+                                packageDir: this.state.doChangeAssetsDir ? e.target.value : this.state.doTrain.packageDir,
+                                assetsDir: this.state.doChangeAssetsDir ? e.target.value : this.state.doTrain.assetsDir,
+                            }
+                        })}/>
                         解压后的目录名:
-                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="解压后的目录名" value={this.state.doTrain.assetsDir}
-                               allowClear onChange={(e)=>this.setState({
-                                doChangeAssetsDir: false,
-                                doTrain: {
-                                   ...this.state.doTrain,
-                                    packageDir: e.target.value,assetsDir: e.target.value
-                               }})}/>
+                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="解压后的目录名"
+                               value={this.state.doTrain.assetsDir}
+                               allowClear onChange={(e) => this.setState({
+                            doChangeAssetsDir: false,
+                            doTrain: {
+                                ...this.state.doTrain,
+                                packageDir: e.target.value, assetsDir: e.target.value
+                            }
+                        })}/>
                         数据格式:
-                        <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}} defaultValue="pascalVOC"
-                                onChange={(value)=>this.setState({doTrain: {...this.state.doTrain,assetsType: value}})}>
+                        <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}}
+                                defaultValue="pascalVOC"
+                                onChange={(value) => this.setState({
+                                    doTrain: {
+                                        ...this.state.doTrain,
+                                        assetsType: value
+                                    }
+                                })}>
                             <Option value="pascalVOC">pascalVOC</Option>
                             <Option value="coco">coco</Option>
                             <Option value="other">other</Option>
                         </Select>
                         使用的框架:
-                        <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}} defaultValue="yolov3" onChange={(value)=>{
-                            console.log("providerType"+value);
-                            if (value === "yolov3") {
-                                this.setState({
-                                        ...this.state,
-                                        baseImage: "darknet_auto-ai-power-v4.0",
-                                        doTrain: {
-                                            ...this.state.doTrain,
-                                            providerType: value,
-                                            image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v4.0`
-                                        }
-                                });
-                            } else if (value === "fasterRcnn") {
-                                this.setState({
-                                        ...this.state,
-                                        baseImage: "ai-power-wo-auto-v4.2",
-                                        doTrain: {
-                                            ...this.state.doTrain,
-                                            providerType: value,
-                                            image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-auto-v4.2`}
-                                });
-                            } else if (value === "maskRcnn") {
-                                this.setState({
-                                    ...this.state,
-                                    baseImage: "ai-power-wo-auto-v4.2",
-                                    doTrain: {
-                                        ...this.state.doTrain,
-                                        providerType: value,
-                                        image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-auto-v4.2`}
-                                });
-                            }
-                        }}>
+                        <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}} defaultValue="yolov3"
+                                onChange={(value) => {
+                                    console.log("providerType" + value);
+                                    if (value === "yolov3") {
+                                        this.setState({
+                                            ...this.state,
+                                            baseImage: "darknet_auto-ai-power-v4.0",
+                                            doTrain: {
+                                                ...this.state.doTrain,
+                                                providerType: value,
+                                                image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v4.0`
+                                            }
+                                        });
+                                    } else if (value === "fasterRcnn") {
+                                        this.setState({
+                                            ...this.state,
+                                            baseImage: "ai-power-wo-auto-v4.2",
+                                            doTrain: {
+                                                ...this.state.doTrain,
+                                                providerType: value,
+                                                image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-auto-v4.2`
+                                            }
+                                        });
+                                    } else if (value === "maskRcnn") {
+                                        this.setState({
+                                            ...this.state,
+                                            baseImage: "ai-power-wo-auto-v4.2",
+                                            doTrain: {
+                                                ...this.state.doTrain,
+                                                providerType: value,
+                                                image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-auto-v4.2`
+                                            }
+                                        });
+                                    }
+                                }}>
                             <Option value="yolov3">yolov3</Option>
                             <Option value="fasterRcnn">fasterRcnn</Option>
                             <Option value="maskRcnn">maskRcnn</Option>
                             <Option value="other">other</Option>
                         </Select>
                         镜像地址:
-                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="tar压缩包名" addonBefore="registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:"
-                               defaultValue={this.state.baseImage} value={this.state.baseImage} allowClear
-                               onChange={(e)=>this.setState({doTrain: {...this.state.doTrain,image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:${e.target.value}`}})}/>
+                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="tar压缩包名"
+                               addonBefore="registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:"
+                               defaultValue={this.state.baseImage} allowClear
+                               onChange={(e) => this.setState({
+                                   doTrain: {
+                                       ...this.state.doTrain,
+                                       image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:${e.target.value}`
+                                   }
+                               })}/>
                         <div
                             style={{
                                 position: 'absolute',
@@ -621,15 +839,15 @@ class FreeFish extends React.Component {
                                 textAlign: 'right',
                             }}
                         >
-                            <Button onClick={()=>{
+                            <Button onClick={() => {
                                 this.setState({
                                     rightVisible: false,
                                     leftVisible: false,
                                 });
-                            }} style={{ marginRight: 8 }}>
-                               取消
+                            }} style={{marginRight: 8}}>
+                                取消
                             </Button>
-                            <Button onClick={()=>{
+                            <Button onClick={() => {
 
                                 console.log(JSON.stringify(this.state.doTrain));
                                 const {dispatch} = this.props;
@@ -637,12 +855,12 @@ class FreeFish extends React.Component {
                                     type: 'service/doTrain',
                                     payload: this.state.doTrain,
                                     callback: (v) => {
-                                        if (v["res"]==="ok"){
+                                        if (v["res"] === "ok") {
                                             message.success("成功加入训练队列");
                                             this.setState({
                                                 rightVisible: false,
                                                 leftVisible: false,
-                                                doTrain:{
+                                                doTrain: {
                                                     ...this.state.doTrain,
                                                 }
                                             });
@@ -653,7 +871,7 @@ class FreeFish extends React.Component {
                                     },
                                 });
                             }}>
-                               提交
+                                提交
                             </Button>
                         </div>
                     </Drawer>
@@ -685,7 +903,14 @@ app.model({
             page: 0,
             list: [],
         },
-        dotrain:{}
+        modelList: {
+            res: '',
+            weights_list: [],
+        },
+        dotrain:{},
+        testRes: {
+            res: '',
+        }
     },
     effects: {
         *getList({ payload,callback}, { call, put }) {
@@ -696,10 +921,26 @@ app.model({
             });
             if (callback)callback(response);
         },
+        *getModelList({ payload,callback}, { call, put }) {
+            const response = yield call(getModelList,payload);
+            yield put({
+                type: 'modelList',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
         *doTrain({ payload,callback}, { call, put }) {
             const response = yield call(doTrain,payload);
             yield put({
                 type: 'dotrain',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
+        *startTest({ payload,callback}, { call, put }) {
+            const response = yield call(startTest,payload);
+            yield put({
+                type: 'testRes',
                 payload: response,
             });
             if (callback)callback(response);
@@ -718,10 +959,22 @@ app.model({
                 trains: action.payload,
             };
         },
+        modelList(state, action) {
+            return {
+                ...state,
+                modelList: action.payload,
+            };
+        },
         dotrain(state, action) {
             return {
                 ...state,
                 dotrain: action.payload,
+            };
+        },
+        testRes(state, action) {
+            return {
+                ...state,
+                testRes: action.payload,
             };
         },
     },
