@@ -1,8 +1,11 @@
+# -*- coding=utf-8 -*-
 # !/usr/bin/env python
 import os
+import glob
 import pika
 import json
 import time
+import socket
 import psycopg2
 import numpy as np
 from wxpy import *
@@ -51,10 +54,11 @@ log.basicConfig(level=log.INFO,  # 控制台打印的日志级别
 class pikaqiu(object):
 
     def __init__(self, root_password='icubic-123', host='localhost', port=5672,
-                 username='guest', password='guest', package_base_path='/home/baymin/daily-work/ftp/',
+                 username='guest', password='guest', package_base_path='/assets',
                  train_exchange='ai.train.topic', train_queue='ai.train.topic-queue', train_routing_key='train.start.#',
                  test_exchange='ai.test.topic', test_queue='ai.test.topic-queue', test_routing_key='test.start.#',
-                 package_exchange='ai.package.topic', package_queue='ai.package.topic-queue', package_routing_key='package.upload-done.#'
+                 package_exchange='ai.package.topic', package_queue='ai.package.topic-queue',
+                 package_routing_key='package.upload-done.#'
                  ):
         self.package_base_path = package_base_path
         self.root_password = root_password
@@ -153,6 +157,7 @@ class pikaqiu(object):
         - *port*: connection port number (defaults to 5432 if not provided)
     :return: 
     '''
+
     def postgres_connect(self, host='localhost', port=5432, user='postgres', password='baymin1024', dbname='power_ai'):
         self.postgres_conn = psycopg2.connect("host=%s port=%d user=%s password=%s dbname=%s" %
                                               (host, port, user, password, dbname))
@@ -269,11 +274,14 @@ def get_package_one():
         package_info = json.loads(body.decode('utf-8'))
         log.info('开始解包')
         os.system('echo "%s" | sudo -S chmod -R 777 /assets' % ff.root_password)
-        os.system("tar -xvf '%s/%s' -C '%s'" % (ff.package_base_path, package_info["packageName"], ff.package_base_path))
+        os.system(
+            "tar -xvf '%s/%s' -C '%s'" % (ff.package_base_path, package_info["packageName"], ff.package_base_path))
         os.system("echo 1 > '%s/%s/untar.log'" % (ff.package_base_path, package_info["packageDir"]))
-        os.system("echo '%s\c' > '%s/%s/project_id.log'" % (package_info['projectId'], ff.package_base_path, package_info["packageDir"]))
+        os.system("echo '%s\c' > '%s/%s/project_id.log'" % (
+            package_info['projectId'], ff.package_base_path, package_info["packageDir"]))
         os.system("echo 等待训练 > '%s/%s/train_status.log'" % (ff.package_base_path, package_info["packageDir"]))
-        os.system("echo '%s' | sudo -S rm '%s/%s'" % (ff.root_password, ff.package_base_path, package_info["packageName"]))
+        os.system(
+            "echo '%s' | sudo -S rm '%s/%s'" % (ff.root_password, ff.package_base_path, package_info["packageName"]))
         # region 更新数据库
         # 这里插入前需要判断是否存在相同的项目
         suc, rows = ff.postgres_execute("SELECT * FROM train_record WHERE project_id='%s'" %
@@ -306,6 +314,18 @@ def get_package_one():
         channel.basic_ack(method_frame.delivery_tag)
         connection.close()
         return method_frame.delivery_tag, body.decode('utf-8')
+
+
+def net_is_used(port, ip='0.0.0.0'):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.connect((ip, port))
+        s.shutdown(2)
+        print('%s:%d is used' % (ip, port))
+        return True
+    except:
+        print('%s:%d is unused' % (ip, port))
+        return False
 
 
 # 获取单个训练队列数据
@@ -466,7 +486,9 @@ def get_test_one():
         return None, None
     else:
         test_info = json.loads(body.decode('utf-8'))
-        testing = int(os.popen("echo %s | sudo -S docker ps -a | grep %s |wc -l" % (ff.root_password, "power-ai-testing")).read().replace('\n', ''))
+        testing = int(os.popen(
+            "echo %s | sudo -S docker ps -a | grep %s |wc -l" % (ff.root_password, "power-ai-testing")).read().replace(
+            '\n', ''))
         if testing == 0:
             if not os.path.exists("%s/%s/test_status" % (ff.package_base_path, test_info["assetsDir"])):
                 os.system("echo '等待检测\c' > '%s/%s/test_status'" %
@@ -500,7 +522,8 @@ def get_test_one():
                 elif "测试失败" in status:
                     channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
                 elif "测试完成" in status:
-                    os.system("echo %s | sudo -S chmod -R 777 %s/%s" % (ff.root_password, ff.package_base_path, test_info["assetsDir"]))
+                    os.system("echo %s | sudo -S chmod -R 777 %s/%s" % (
+                        ff.root_password, ff.package_base_path, test_info["assetsDir"]))
                     os.system("rm %s/%s/test_status" % (ff.package_base_path, test_info["assetsDir"]))
                     os.system("tar -C %s -cf %s/%s.tar infer" % (ff.package_base_path + "/" + test_info["assetsDir"],
                                                                  ff.package_base_path + "/" + test_info["assetsDir"],
@@ -520,7 +543,8 @@ def do_power_ai_train_http():
                         "packageDir": data["packageDir"], "packageName": data["packageName"]}
         # region 更新数据库
         # 这里插入前需要判断是否存在相同的项目
-        suc, rows = ff.postgres_execute("SELECT * FROM train_record WHERE project_id='%s'" % package_info['projectId'], True)
+        suc, rows = ff.postgres_execute("SELECT * FROM train_record WHERE project_id='%s'" % package_info['projectId'],
+                                        True)
         if rows is None or len(rows) <= 0:
             ff.postgres_execute("INSERT INTO train_record "
                                 "(project_id, project_name,"
@@ -584,7 +608,8 @@ def do_train_http():
         do_basic_publish('ai.train.topic', "train.start.%s" % data['projectName'], json.dumps(trainInfo))
         # region 更新数据库
         # 这里插入前需要判断是否存在相同的项目
-        suc, rows = ff.postgres_execute("SELECT * FROM train_record WHERE project_id='%s'" % package_info['projectId'], True)
+        suc, rows = ff.postgres_execute("SELECT * FROM train_record WHERE project_id='%s'" % package_info['projectId'],
+                                        True)
         if rows is None or len(rows) <= 0:
             ff.postgres_execute("INSERT INTO train_record "
                                 "(project_id, project_name,"
@@ -656,6 +681,74 @@ def get_train_list_http():
         return Response(json.dumps(ret_json), mimetype='application/json')
 
 
+# region 测试服务的所有接口
+@app.route('/get_model_list/<path>', methods=['GET'])
+def get_model_list(path):
+    weights_list = []
+    for item in glob.glob("/assets/%s/backup/*.weights" % path):
+        filepath, tempfilename = os.path.split(item)
+        weights_list.append({"path": item, "filename": tempfilename})
+    return Response(json.dumps({"res": "ok", "weights_list": weights_list}), mimetype='application/json')
+
+
+@app.route('/start_test', methods=['POST'])
+def start_test():
+    try:
+        data = request.json
+        if data is not None:
+            docker_volume = "/darknet/assets"
+            port = "8100"
+            if data['providerType'] == 'yolov3':
+                docker_volume = "/darknet/assets"
+                port = "8100"
+            elif data['providerType'] == 'fasterRcnn':
+                docker_volume = "/Detectron/detectron/datasets/data"
+                port = "8101"
+            elif data['providerType'] == 'maskRcnn':
+                docker_volume = "/Detectron/detectron/datasets/data"
+                port = "8101"
+            elif data['providerType'] == 'other':
+                docker_volume = data['docker_volume']
+                port = "8102"
+
+            cmd = "echo %s | sudo -S docker run --gpus '\"device=5\"' \
+                        --name service-testing \
+                        -p 8070:8070 \
+                        -p %s:%s \
+                        -v /opt/remote_train_web/aiimg/:/aiimg \
+                        -v /opt/remote_train_web/excel/:/excel \
+                        -v %s:%s \
+                        -v %s:/darknet/assets/backup/yolov3-voc_last.weights \
+                        --net ai --ip 10.10.0.6 \
+                        --add-host service-postgresql:10.10.0.4 \
+                        --add-host service-rabbitmq:10.10.0.3 \
+                        --add-host service-ftp:10.10.0.2 \
+                        --add-host service-web:10.10.0.5 \
+                        --rm -d %s" % (
+                ff.root_password,
+                port, port,
+                ff.package_base_path + "/" + data["assetsDir"], docker_volume,
+                data["weights"],
+                data["image"])
+            log.info("\n\n**************************\n测试的命令: %s\n**************************\n" % cmd)
+            os.system(cmd)
+            start_time = time.time()
+            while 1:
+                time.sleep(0.5)
+                if net_is_used(int(port)):
+                    break
+                if (time.time() - start_time) > 60:
+                    break
+            # registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto_test-service-ai-power-v4.5
+    except Exception as e:
+        log.error(e)
+        return Response(json.dumps({"res": "err"}), mimetype='application/json')
+    return Response(json.dumps({"res": "ok"}), mimetype='application/json')
+
+
+# endregion
+
+
 if __name__ == '__main__':
     # id = os.popen(
     #     'cat /home/baymin/daily-work/ftp/train-assets-cizhuan-fasterRcnn-20190808/container_id.log | head -n 1')
@@ -670,7 +763,7 @@ if __name__ == '__main__':
                      package_base_path='/assets')
     else:
         ff = pikaqiu(root_password='icubic-123', host='192.168.31.75', username='baymin', password='baymin1024',
-                 package_base_path='/assets')
+                     package_base_path='/assets')
     # init(self, sql=True, sql_host='localhost', draw=True, draw_host='localhost', draw_port=8097):
     # sql: 是否开启数据库，sql_host：数据库地址，draw：是否开启画图，draw_host：画图的服务地址，draw_port：画图的服务端口
     ff.init(sql=False, sql_host='192.168.31.75', draw_host='192.168.31.75')
@@ -692,6 +785,7 @@ if __name__ == '__main__':
     end_date(datetime or str)   结束日期
     timezone(datetime.tzinfo or   str)  时区
     '''
+    get_train_one()
     if debug:
         scheduler.add_job(get_train_one, 'interval', minutes=10000)
         scheduler.add_job(get_package_one, 'interval', minutes=5000)
