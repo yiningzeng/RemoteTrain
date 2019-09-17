@@ -28,6 +28,8 @@ class FreeFish extends React.Component {
                 assetsDir: "", //nowAssetsDir
                 weights: undefined,
                 port: 8100,
+                javaUrl: "",
+                javaPort: 888,
                 image: "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto_test-service-ai-power-v5.0",
             },
         },
@@ -379,15 +381,19 @@ class FreeFish extends React.Component {
                                                                let testBaseImage = "darknet_auto_test-service-ai-power-v5.0";
                                                                let port = 8100;
                                                                let javaUrl = "";
+                                                               let javaPort = 888;
                                                                if (record.net_framework === "yolov3") {
                                                                    port = 8100;
                                                                    testBaseImage = "darknet_auto_test-service-ai-power-v5.0";
+                                                                   javaUrl = "ai.8101.api.qtingvision.com";
                                                                } else if (record.net_framework === "fasterRcnn") {
                                                                    port = 8200;
-                                                                   testBaseImage = "ai-power-auto-test-v5.0";
+                                                                   testBaseImage = "ai-power-test-auto-v5.1";
+                                                                   javaUrl = "ai.8101.api.qtingvision.com";
                                                                } else if (record.net_framework === "maskRcnn") {
                                                                    port = 8300;
-                                                                   testBaseImage = "ai-power-auto-test-v5.0";
+                                                                   testBaseImage = "ai-power-test-auto-v5.1";
+                                                                   javaUrl = "ai.8101.api.qtingvision.com";
                                                                }
 
                                                                this.setState({
@@ -400,6 +406,8 @@ class FreeFish extends React.Component {
                                                                            doTest: {
                                                                                ...this.state.test.doTest,
                                                                                port: port,
+                                                                               javaUrl: javaUrl,
+                                                                               javaPort: javaPort,
                                                                                providerType: record.net_framework,
                                                                                assetsDir: record.assets_directory_name, //nowAssetsDir
                                                                            }
@@ -476,7 +484,7 @@ class FreeFish extends React.Component {
                                                         weights: undefined,
                                                     },
                                                     // showTestDrawerUrl: `/test?javaUrl=${}&javaPort=${}&providerType=${this.state.test.doTest.providerType}&port=${this.state.test.port}&assets=${this.state.test.doTest.assetsDir}`,
-                                                    showTestDrawerUrl: `/test?providerType=${this.state.test.doTest.providerType}&port=${this.state.test.doTest.port}&assets=${this.state.test.doTest.assetsDir}`,
+                                                    showTestDrawerUrl: `/test?javaUrl=${this.state.test.doTest.javaUrl}&javaPort=${this.state.test.doTest.javaPort}&providerType=${this.state.test.doTest.providerType}&port=${this.state.test.doTest.port}&assets=${this.state.test.doTest.assetsDir}`,
                                                 }
                                             });
 
@@ -507,7 +515,7 @@ class FreeFish extends React.Component {
                             网络框架:
                             <Input style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder="Basic usage" disabled value={this.state.test.doTest.providerType}/>
                             服务端口:
-                            <Input style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder="Basic usage" disabled value={this.state.test.port}/>
+                            <Input style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder="Basic usage" disabled value={this.state.test.doTest.port}/>
                             选择加载的权重文件:
                             <Select
                                 style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
