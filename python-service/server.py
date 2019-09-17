@@ -766,7 +766,7 @@ if __name__ == '__main__':
                      package_base_path='/assets')
     # init(self, sql=True, sql_host='localhost', draw=True, draw_host='localhost', draw_port=8097):
     # sql: 是否开启数据库，sql_host：数据库地址，draw：是否开启画图，draw_host：画图的服务地址，draw_port：画图的服务端口
-    ff.init(sql=False, sql_host='192.168.31.75', draw_host='192.168.31.75')
+    ff.init(sql=False, sql_host='192.168.31.75', draw_host='maps.qtingvision.com', draw_port=888)
 
     # 创建后台执行的 schedulers
     scheduler = BackgroundScheduler()
