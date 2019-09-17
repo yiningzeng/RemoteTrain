@@ -672,7 +672,7 @@ def get_train_list_http():
         "SELECT id, project_id, container_id, project_name, status,"
         " net_framework, assets_type, assets_directory_base, assets_directory_name,"
         " is_jump,draw_url,image_url, to_char(create_time, 'YYYY-MM-DD HH24:MI:SS') as create_time"
-        " FROM train_record order by create_time limit %d OFFSET %d" % (num, offset), True)
+        " FROM train_record order by create_time desc limit %d OFFSET %d" % (num, offset), True)
     if rows is None or len(rows) == 0:
         return json.dumps(ret_json)
     else:
