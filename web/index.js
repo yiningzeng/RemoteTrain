@@ -26,7 +26,8 @@ class FreeFish extends React.Component {
             doTest: {
                 providerType: "yolov3",
                 assetsDir: "", //nowAssetsDir
-                weights: "yolov3-voc_last.weights",
+                weights: undefined,
+                port: 8100,
                 image: "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto_test-service-ai-power-v5.0",
             },
         },
@@ -50,8 +51,8 @@ class FreeFish extends React.Component {
                      "providerOptions": {"yolov3Image": data["image"]}
                      }*/
         api: {
-            url: localStorage.getItem("api.url") === null?"192.168.31.75":localStorage.getItem("api.url"),
-            port: localStorage.getItem("api.port") === null?18888:localStorage.getItem("api.port"),
+            url: localStorage.getItem("api.url") === null?"server.qtingvision.com":localStorage.getItem("api.url"),
+            port: localStorage.getItem("api.port") === null?888:localStorage.getItem("api.port"),
         },
         doTrain: {
             projectId: undefined, // 项目id
@@ -369,21 +370,41 @@ class FreeFish extends React.Component {
                                                        const {dispatch} = this.props;
                                                        dispatch({
                                                            type: 'service/getModelList',
-                                                           payload: encodeURI(record.assets_directory_name),
+                                                           payload: {
+                                                               type: record.net_framework,
+                                                               path: encodeURI(record.assets_directory_name)
+                                                           },
                                                            callback: (v) => {
+
+                                                               let testBaseImage = "darknet_auto_test-service-ai-power-v5.0";
+                                                               let port = 8100;
+                                                               let javaUrl = "";
+                                                               if (record.net_framework === "yolov3") {
+                                                                   port = 8100;
+                                                                   testBaseImage = "darknet_auto_test-service-ai-power-v5.0";
+                                                               } else if (record.net_framework === "fasterRcnn") {
+                                                                   port = 8200;
+                                                                   testBaseImage = "ai-power-auto-test-v5.0";
+                                                               } else if (record.net_framework === "maskRcnn") {
+                                                                   port = 8300;
+                                                                   testBaseImage = "ai-power-auto-test-v5.0";
+                                                               }
+
                                                                this.setState({
-                                                                   ...this.state,
-                                                                   test: {
-                                                                       ...this.state.test,
-                                                                       loading: false,
-                                                                       showTestModal: true,
-                                                                       doTest: {
-                                                                           ...this.state.test.doTest,
-                                                                           providerType: record.net_framework,
-                                                                           assetsDir: record.assets_directory_name, //nowAssetsDir
+                                                                       ...this.state,
+                                                                       test: {
+                                                                           ...this.state.test,
+                                                                           loading: false,
+                                                                           baseImage: testBaseImage,
+                                                                           showTestModal: true,
+                                                                           doTest: {
+                                                                               ...this.state.test.doTest,
+                                                                               port: port,
+                                                                               providerType: record.net_framework,
+                                                                               assetsDir: record.assets_directory_name, //nowAssetsDir
+                                                                           }
                                                                        }
-                                                                   }
-                                                               });
+                                                                   });
                                                            },
                                                        });
                                                    });
@@ -418,6 +439,7 @@ class FreeFish extends React.Component {
                         title="参数设置"
                         okText="打开测试服务"
                         cancelText="取消"
+                        destroyOnClose
                         width={1000}
                         visible={this.state.test.showTestModal}
                         onOk={() => {
@@ -438,15 +460,26 @@ class FreeFish extends React.Component {
                                             ...this.state.test.doTest
                                         },
                                         callback: (v) => {
+                                            if (v.res !== "ok") {
+                                                message.error(v.msg);
+                                            }
+
                                             this.setState({
                                                 ...this.state,
                                                 test: {
                                                     ...this.state.test,
                                                     showTestDrawer: true,
                                                     showTestModal: false,
-                                                    showTestDrawerUrl: `/test?port=8100&assets=${this.state.test.nowAssetsDir}`,
+                                                    loading: false,
+                                                    doTest: {
+                                                        ...this.state.test.doTest,
+                                                        weights: undefined,
+                                                    },
+                                                    // showTestDrawerUrl: `/test?javaUrl=${}&javaPort=${}&providerType=${this.state.test.doTest.providerType}&port=${this.state.test.port}&assets=${this.state.test.doTest.assetsDir}`,
+                                                    showTestDrawerUrl: `/test?providerType=${this.state.test.doTest.providerType}&port=${this.state.test.doTest.port}&assets=${this.state.test.doTest.assetsDir}`,
                                                 }
-                                            })
+                                            });
+
                                             // const tempwindow=window.open();
                                             // tempwindow.location=`/test?port=8100&assets=${this.state.test.nowAssetsDir}`;
                                             // window.open(`/test?port=8100&assets=${this.state.test.nowAssetsDir}`, "_blank");
@@ -460,15 +493,24 @@ class FreeFish extends React.Component {
                                 test: {
                                     ...this.state.test,
                                     showTestModal: false,
+                                    doTest: {
+                                        ...this.state.test.doTest,
+                                        weights: undefined,
+                                    }
                                 }
                             });
                         }}
-                        okButtonProps={{disabled: false}}
+                        okButtonProps={{disabled: this.state.test.doTest.weights === undefined}}
                         cancelButtonProps={{disabled: false}}
                     >
                         <Spin spinning={this.state.test.loading} tip={this.state.test.tips} delay={500}>
+                            网络框架:
+                            <Input style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder="Basic usage" disabled value={this.state.test.doTest.providerType}/>
+                            服务端口:
+                            <Input style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder="Basic usage" disabled value={this.state.test.port}/>
                             选择加载的权重文件:
-                            <Select style={{width: '100%', marginTop: "10px", marginBottom: "20px"}}
+                            <Select
+                                style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
                                     onChange={(v)=>{
                                         this.setState({
                                             ...this.state,
@@ -488,7 +530,7 @@ class FreeFish extends React.Component {
                             镜像地址:
                             <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="tar压缩包名"
                                    addonBefore="registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:"
-                                   defaultValue={this.state.test.baseImage} allowClear
+                                   value={this.state.test.baseImage} allowClear
                                    onChange={(e) => this.setState({
                                        ...this.state,
                                        test: {
@@ -518,7 +560,7 @@ class FreeFish extends React.Component {
                         })}}
                         visible={this.state.test.showTestDrawer}
                     >
-                        <Iframe url={"http://192.168.31.75/test/?port=8100#/"}
+                        <Iframe url={this.state.test.showTestDrawerUrl}
                                 width="100%"
                                 height="800px"
                                 id="myId"
