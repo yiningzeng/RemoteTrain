@@ -51,6 +51,7 @@ log.basicConfig(level=log.INFO,  # 控制台打印的日志级别
                 )
 
 
+
 class pikaqiu(object):
 
     def __init__(self, root_password='icubic-123', host='localhost', port=5672,
@@ -646,6 +647,11 @@ def draw_chat_http():
         if data is not None:
             ff.draw_chat(data)
     except Exception as e:
+        try:
+            my_friend = bot.friends().search('郭永龙')[0]
+            my_friend.send('训练溃溃%s' % datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        except Exception as e:
+            log.error('send wechat err')
         ff.draw_chat(err=True)
         log.error(e)
     return Response(json.dumps({"res": "ok"}), mimetype='application/json')
@@ -791,6 +797,11 @@ if __name__ == '__main__':
         scheduler.add_job(get_package_one, 'interval', minutes=5000)
         scheduler.add_job(get_test_one, 'interval', seconds=5)
     else:
+        bot = Bot(cache_path=True, console_qr=True)
+        myself = bot.self
+        my_friend = bot.friends().search('郭永龙')[0]
+        # my_friend.send('微信监督开始')
+        bot.file_helper.send('微信监督开始')
         scheduler.add_job(get_train_one, 'interval', minutes=10)
         scheduler.add_job(get_package_one, 'interval', minutes=5)
         scheduler.add_job(get_test_one, 'interval', seconds=5)
