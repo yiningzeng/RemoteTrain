@@ -27,6 +27,7 @@ Windows Python 2.7 version: https://github.com/AlexeyAB/darknet/blob/fc496d52bf2
 @author: Philip Kahn
 @date: 20180503
 """
+# encoding=utf8
 # pylint: disable=R, W0401, W0614, W0703
 from ctypes import *
 import math
@@ -44,7 +45,8 @@ import scipy.misc
 import json
 import time
 import logging as log
-
+reload(sys)
+sys.setdefaultencoding('utf8')
 app = Flask(__name__)
 
 log.basicConfig(level=log.INFO, 
