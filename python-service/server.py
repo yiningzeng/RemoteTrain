@@ -688,10 +688,20 @@ def get_train_list_http():
 
 
 # region 测试服务的所有接口
-@app.route('/get_model_list/<path>', methods=['GET'])
-def get_model_list(path):
+@app.route('/get_model_list/<framework_type>/<path>', methods=['GET'])
+def get_model_list(framework_type, path):
     weights_list = []
-    for item in glob.glob("/assets/%s/backup/*.weights" % path):
+    # framework_type = "yolov3"
+    search_path = "/assets/%s/backup/*.weights"
+    if framework_type == 'yolov3':
+        search_path = "/assets/%s/backup/*.weights"
+    elif framework_type == 'fasterRcnn':
+        search_path = "/assets/%s/result/train/coco_2014_train/generalized_rcnn/*.pkl"
+    elif framework_type == 'maskRcnn':
+        search_path = "/assets/%s/result/train/coco_2014_train/generalized_rcnn/*.pkl"
+    elif framework_type == 'other':
+        search_path = "不支持，后续开发"
+    for item in sorted(glob.glob(search_path % path), key=os.path.getmtime, reverse=True):  # key 根据时间排序 reverse true表示倒叙
         filepath, tempfilename = os.path.split(item)
         weights_list.append({"path": item, "filename": tempfilename})
     return Response(json.dumps({"res": "ok", "weights_list": weights_list}), mimetype='application/json')
@@ -703,28 +713,35 @@ def start_test():
         data = request.json
         if data is not None:
             docker_volume = "/darknet/assets"
-            port = "8100"
+            docker_volume_model = "/darknet/assets/backup/yolov3-voc_last.weights"
+            port = data['port']  # 检测服务的端口 容器内外都一致，java 中间件对外端口在这个基础上+1
+            docker_name = "darknet-service-testing"  # 用于每次新建 删除
             if data['providerType'] == 'yolov3':
+                docker_name = "darknet-service-testing"
                 docker_volume = "/darknet/assets"
-                port = "8100"
+                docker_volume_model = "/darknet/assets/backup/yolov3-voc_last.weights"
             elif data['providerType'] == 'fasterRcnn':
+                docker_name = "detectron-service-testing"
                 docker_volume = "/Detectron/detectron/datasets/data"
-                port = "8101"
+                docker_volume_model = "/darknet/assets/backup/yolov3-voc_last.weights"
             elif data['providerType'] == 'maskRcnn':
+                docker_name = "detectron-service-testing"
                 docker_volume = "/Detectron/detectron/datasets/data"
-                port = "8101"
+                docker_volume_model = "/darknet/assets/backup/yolov3-voc_last.weights"
             elif data['providerType'] == 'other':
+                docker_name = "other-service-testing"
                 docker_volume = data['docker_volume']
-                port = "8102"
+                docker_volume_model = data['docker_volume_model']
 
+            os.system("echo '%s' | sudo -S docker stop '%s'" % (ff.root_password, docker_name))
             cmd = "echo %s | sudo -S docker run --gpus '\"device=5\"' \
-                        --name service-testing \
-                        -p 8070:8070 \
-                        -p %s:%s \
+                        --name %s \
+                        -p %d:8070 \
+                        -p %d:%d \
                         -v /opt/remote_train_web/aiimg/:/aiimg \
                         -v /opt/remote_train_web/excel/:/excel \
-                        -v %s:%s \
-                        -v %s:/darknet/assets/backup/yolov3-voc_last.weights \
+                        -v '%s':'%s' \
+                        -v '%s':'%s' \
                         --net ai --ip 10.10.0.6 \
                         --add-host service-postgresql:10.10.0.4 \
                         --add-host service-rabbitmq:10.10.0.3 \
@@ -732,9 +749,11 @@ def start_test():
                         --add-host service-web:10.10.0.5 \
                         --rm -d %s" % (
                 ff.root_password,
+                docker_name,
+                port+1,
                 port, port,
                 ff.package_base_path + "/" + data["assetsDir"], docker_volume,
-                data["weights"],
+                data["weights"], docker_volume_model,
                 data["image"])
             log.info("\n\n**************************\n测试的命令: %s\n**************************\n" % cmd)
             os.system(cmd)
@@ -743,13 +762,13 @@ def start_test():
                 time.sleep(0.5)
                 if net_is_used(int(port)):
                     break
-                if (time.time() - start_time) > 60:
-                    break
+                if (time.time() - start_time) > 30:
+                    return Response(json.dumps({"res": "err", "msg": "开启超时，请手动查询状态"}), mimetype='application/json')
             # registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto_test-service-ai-power-v4.5
     except Exception as e:
         log.error(e)
-        return Response(json.dumps({"res": "err"}), mimetype='application/json')
-    return Response(json.dumps({"res": "ok"}), mimetype='application/json')
+        return Response(json.dumps({"res": "err", "msg": "开启失败"}), mimetype='application/json')
+    return Response(json.dumps({"res": "ok", "msg": "开启成功"}), mimetype='application/json')
 
 
 # endregion
