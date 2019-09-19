@@ -106,10 +106,8 @@ class pikaqiu(object):
                 " FROM train_record WHERE status=2", True)
             if rows is not None and len(rows) > 0:
                 assets_directory_name = rows[0][2]
-                os.system(
-                    "echo 训练失败-梯度爆炸了 > '%s/%s/train_status.log'" % (self.package_base_path, assets_directory_name))
-                os.system("echo '%s' | sudo -S docker stop `cat '%s/%s/train.dname'`" % (
-                    self.root_password, self.package_base_path, assets_directory_name))
+                # os.system("echo 训练失败-梯度爆炸了 > '%s/%s/train_status.log'" % (self.package_base_path, assets_directory_name))  # 会自动退出，所以这里不需要了
+                # os.system("echo '%s' | sudo -S docker stop `cat '%s/%s/train.dname'`" % (self.root_password, self.package_base_path, assets_directory_name))  # 会自动退出，所以这里不需要了
                 self.postgres_execute("UPDATE train_record SET "
                                       "status=%d, project_name='%s'"
                                       " WHERE project_id='%s'" %
@@ -129,7 +127,7 @@ class pikaqiu(object):
                         self.postgres_execute("UPDATE train_record SET "
                                               "status=%d, project_name='%s'"
                                               " WHERE project_id='%s'" %
-                                              (2, str(rows[0][3]).replace("梯度爆炸了", ""), rows[0][0]))
+                                              (2, str(rows[0][3]).replace("-梯度爆炸了", ""), rows[0][0]))
                         if debug:
                             self.draw_windows = Visdom(env=project_id)
                         else:
@@ -645,14 +643,18 @@ def draw_chat_http():
     try:
         data = request.json
         if data is not None:
-            ff.draw_chat(data)
+            if "爆炸" in json.dumps(data):
+                ff.draw_chat(err=True)
+            else:
+                ff.draw_chat(data)
     except Exception as e:
         try:
-            my_friend = bot.friends().search('郭永龙')[0]
-            my_friend.send('训练溃溃%s' % datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+            if wechat_monitor:
+                my_friend = bot.friends().search('郭永龙')[0]
+                my_friend.send('训练溃溃%s' % datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         except Exception as e:
             log.error('send wechat err')
-        ff.draw_chat(err=True)
+        # ff.draw_chat(err=True)
         log.error(e)
     return Response(json.dumps({"res": "ok"}), mimetype='application/json')
 
@@ -703,6 +705,8 @@ def get_model_list(framework_type, path):
         search_path = "不支持，后续开发"
     for item in sorted(glob.glob(search_path % path), key=os.path.getmtime, reverse=True):  # key 根据时间排序 reverse true表示倒叙
         filepath, tempfilename = os.path.split(item)
+        if "server.pkl" in tempfilename or "test.weights" in tempfilename:
+            continue
         weights_list.append({"path": item, "filename": tempfilename})
     return Response(json.dumps({"res": "ok", "weights_list": weights_list}), mimetype='application/json')
 
@@ -723,11 +727,11 @@ def start_test():
             elif data['providerType'] == 'fasterRcnn':
                 docker_name = "detectron-service-testing"
                 docker_volume = "/Detectron/detectron/datasets/data"
-                docker_volume_model = "/darknet/assets/backup/yolov3-voc_last.weights"
+                docker_volume_model = "/Detectron/detectron/datasets/data/result/train/coco_2014_train/generalized_rcnn/server.pkl"
             elif data['providerType'] == 'maskRcnn':
                 docker_name = "detectron-service-testing"
                 docker_volume = "/Detectron/detectron/datasets/data"
-                docker_volume_model = "/darknet/assets/backup/yolov3-voc_last.weights"
+                docker_volume_model = "/Detectron/detectron/datasets/data/result/train/coco_2014_train/generalized_rcnn/server.pkl"
             elif data['providerType'] == 'other':
                 docker_name = "other-service-testing"
                 docker_volume = data['docker_volume']
@@ -740,9 +744,9 @@ def start_test():
                         -p %d:%d \
                         -v /opt/remote_train_web/aiimg/:/aiimg \
                         -v /opt/remote_train_web/excel/:/excel \
+                        -v /etc/localtime:/etc/localtime:ro \
                         -v '%s':'%s' \
                         -v '%s':'%s' \
-                        --net ai --ip 10.10.0.6 \
                         --add-host service-postgresql:10.10.0.4 \
                         --add-host service-rabbitmq:10.10.0.3 \
                         --add-host service-ftp:10.10.0.2 \
@@ -762,7 +766,7 @@ def start_test():
                 time.sleep(0.5)
                 if net_is_used(int(port)):
                     break
-                if (time.time() - start_time) > 30:
+                if (time.time() - start_time) > 60:
                     return Response(json.dumps({"res": "err", "msg": "开启超时，请手动查询状态"}), mimetype='application/json')
             # registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto_test-service-ai-power-v4.5
     except Exception as e:
@@ -783,6 +787,7 @@ if __name__ == '__main__':
 
     # channel = connection.channel()
     debug = False
+    wechat_monitor = False
     if debug:
         ff = pikaqiu(root_password='baymin1024', host='192.168.31.157', username='baymin', password='baymin1024',
                      package_base_path='/assets')
@@ -816,11 +821,12 @@ if __name__ == '__main__':
         scheduler.add_job(get_package_one, 'interval', minutes=5000)
         scheduler.add_job(get_test_one, 'interval', seconds=5)
     else:
-        bot = Bot(cache_path=True, console_qr=True)
-        myself = bot.self
-        my_friend = bot.friends().search('郭永龙')[0]
-        # my_friend.send('微信监督开始')
-        bot.file_helper.send('微信监督开始')
+        if wechat_monitor:
+            bot = Bot(cache_path=True, console_qr=True)
+            myself = bot.self
+            my_friend = bot.friends().search('郭永龙')[0]
+            # my_friend.send('微信监督开始')
+            bot.file_helper.send('微信监督开始')
         scheduler.add_job(get_train_one, 'interval', minutes=10)
         scheduler.add_job(get_package_one, 'interval', minutes=5)
         scheduler.add_job(get_test_one, 'interval', seconds=5)
