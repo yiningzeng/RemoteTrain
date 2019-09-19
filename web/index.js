@@ -17,7 +17,8 @@ moment.locale('zh-cn');
 class FreeFish extends React.Component {
     state = {
         test: {
-            baseImage: "darknet_auto_test-service-ai-power-v5.0",
+            frontImage: "registry.cn-hangzhou.aliyuncs.com/baymin/darknet-test:",
+            baseImage: "latest",
             showTestDrawer: false,
             showTestDrawerUrl: "",
             showTestModal: false,
@@ -28,9 +29,9 @@ class FreeFish extends React.Component {
                 assetsDir: "", //nowAssetsDir
                 weights: undefined,
                 port: 8100,
-                javaUrl: "",
+                javaUrl: "ai.8101.api.qtingvision.com",
                 javaPort: 888,
-                image: "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto_test-service-ai-power-v5.0",
+                image: "registry.cn-hangzhou.aliyuncs.com/baymin/darknet-test:latest",
             },
         },
         timer: null,
@@ -42,7 +43,7 @@ class FreeFish extends React.Component {
         leftVisible: false,
         rightVisible: false,
         doChangeAssetsDir: true,
-        baseImage: "darknet_auto-ai-power-v4.0",
+
         /*
         *  package_info = {"projectId": data["projectId"], "projectName": data["projectName"], "packageDir": data["packageDir"], "packageName": data["packageName"]}
         trainInfo = {"projectId": data["projectId"],
@@ -56,16 +57,20 @@ class FreeFish extends React.Component {
             url: localStorage.getItem("api.url") === null?"server.qtingvision.com":localStorage.getItem("api.url"),
             port: localStorage.getItem("api.port") === null?888:localStorage.getItem("api.port"),
         },
-        doTrain: {
-            projectId: undefined, // 项目id
-            projectName: undefined, // 项目名称
-            packageDir: undefined, // tar压缩包里面文件夹的目录名
-            packageName: "", //tar包的名称
-            assetsDir: undefined, // 素材文件夹，和packageDir相同
-            assetsType: "pascalVoc", // 素材的类型，pascalVoc和coco和other
-            providerType: "yolov3", // 框架的类型yolov3 fasterRcnn maskRcnn
-            image: "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v4.0", // 镜像路径
-        },
+        train : {
+            frontImage: "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:",
+            baseImage: "latest",
+            doTrain: {
+                projectId: undefined, // 项目id
+                projectName: undefined, // 项目名称
+                packageDir: undefined, // tar压缩包里面文件夹的目录名
+                packageName: "", //tar包的名称
+                assetsDir: undefined, // 素材文件夹，和packageDir相同
+                assetsType: "pascalVoc", // 素材的类型，pascalVoc和coco和other
+                providerType: "yolov3", // 框架的类型yolov3 fasterRcnn maskRcnn
+                image: "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:latest", // 镜像路径
+            },
+        }
     };
 
     onSelectChange = (selectedRowKeys) => {
@@ -333,9 +338,12 @@ class FreeFish extends React.Component {
                         this.setState({
                             rightVisible: true,
                             leftVisible: true,
-                            doTrain: {
-                                ...this.state.doTrain,
-                                projectId: moment().format('x')
+                            train: {
+                                ...this.state.train,
+                                doTrain: {
+                                    ...this.state.doTrain,
+                                    projectId: moment().format('x')
+                                }
                             }
                         });
                     }}>
@@ -378,22 +386,27 @@ class FreeFish extends React.Component {
                                                            },
                                                            callback: (v) => {
 
-                                                               let testBaseImage = "darknet_auto_test-service-ai-power-v5.0";
+                                                               let fImage = "";
+                                                               let bImage = "latest";
                                                                let port = 8100;
                                                                let javaUrl = "";
                                                                let javaPort = 888;
                                                                if (record.net_framework === "yolov3") {
                                                                    port = 8100;
-                                                                   testBaseImage = "darknet_auto_test-service-ai-power-v5.0";
+                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/darknet-test:";
                                                                    javaUrl = "ai.8101.api.qtingvision.com";
                                                                } else if (record.net_framework === "fasterRcnn") {
                                                                    port = 8200;
-                                                                   testBaseImage = "ai-power-test-auto-v5.1";
+                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron-test:";
                                                                    javaUrl = "ai.8101.api.qtingvision.com";
                                                                } else if (record.net_framework === "maskRcnn") {
                                                                    port = 8300;
-                                                                   testBaseImage = "ai-power-test-auto-v5.1";
+                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron-test:";
                                                                    javaUrl = "ai.8101.api.qtingvision.com";
+                                                               } else if (record.net_framework === "other") {
+                                                                   port = 8400;
+                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:";
+                                                                   javaUrl = "ai.8401.api.qtingvision.com";
                                                                }
 
                                                                this.setState({
@@ -401,7 +414,8 @@ class FreeFish extends React.Component {
                                                                        test: {
                                                                            ...this.state.test,
                                                                            loading: false,
-                                                                           baseImage: testBaseImage,
+                                                                           frontImage: fImage,
+                                                                           baseImage: bImage,
                                                                            showTestModal: true,
                                                                            doTest: {
                                                                                ...this.state.test.doTest,
@@ -410,6 +424,7 @@ class FreeFish extends React.Component {
                                                                                javaPort: javaPort,
                                                                                providerType: record.net_framework,
                                                                                assetsDir: record.assets_directory_name, //nowAssetsDir
+                                                                               image: `${fImage}${bImage}`
                                                                            }
                                                                        }
                                                                    });
@@ -425,7 +440,7 @@ class FreeFish extends React.Component {
                                        <Row>
                                            <Iframe url={record.draw_url}
                                                    width="100%"
-                                                   height="500px"
+                                                   height="300px"
                                                    id="myId"
                                                    frameBorder={0}
                                                    className="myClassname"
@@ -537,7 +552,7 @@ class FreeFish extends React.Component {
                             </Select>
                             镜像地址:
                             <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="tar压缩包名"
-                                   addonBefore="registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:"
+                                   addonBefore={this.state.test.frontImage}
                                    value={this.state.test.baseImage} allowClear
                                    onChange={(e) => this.setState({
                                        ...this.state,
@@ -545,9 +560,8 @@ class FreeFish extends React.Component {
                                            ...this.state.test,
                                            doTest: {
                                                ...this.state.test.doTest,
-                                               image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:${e.target.value}`
+                                               image: `${this.state.test.frontImage}${e.target.value}`
                                            }
-
                                        }
                                    })}/>
                         </Spin>
@@ -727,16 +741,6 @@ class FreeFish extends React.Component {
                         }}
                         visible={this.state.rightVisible}
                     >
-                        {/*doTrain:{*/}
-                        {/*projectId: undefined, // 项目id*/}
-                        {/*projectName: undefined, // 项目名称*/}
-                        {/*packageDir: undefined, // tar压缩包里面文件夹的目录名*/}
-                        {/*packageName: undefined, //tar包的名称*/}
-                        {/*assetsDir: undefined, // 素材文件夹，和packageDir相同*/}
-                        {/*assetsType: undefined, // 素材的类型，pascalVoc和coco*/}
-                        {/*providerType: undefined, // 框架的类型yolov3 fasterRcnn maskRcnn*/}
-                        {/*image: undefined, // 镜像路径*/}
-                        {/*},*/}
                         接口地址:
                         <InputGroup style={{marginTop: "10px", marginBottom: "20px"}} compact>
                             <Input style={{width: '50%'}} addonBefore="http://" value={this.state.api.url}
@@ -778,48 +782,63 @@ class FreeFish extends React.Component {
                         </InputGroup>
                         项目ID:
                         <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="项目ID"
-                               value={this.state.doTrain.projectId}
+                               value={this.state.train.doTrain.projectId}
                                allowClear onChange={(e) => this.setState({
-                            doTrain: {
-                                ...this.state.doTrain,
-                                projectId: e.target.value
+                            train: {
+                                ...this.state.train,
+                                doTrain: {
+                                    ...this.state.doTrain,
+                                    projectId: e.target.value
+                                }
                             }
                         })}/>
                         项目名:
                         <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="项目名"
                                allowClear onChange={(e) => this.setState({
-                            doTrain: {
-                                ...this.state.doTrain,
-                                projectName: e.target.value
+                            train: {
+                                ...this.state.train,
+                                doTrain: {
+                                    ...this.state.doTrain,
+                                    projectName: e.target.value
+                                }
                             }
                         })}/>
                         tar压缩包名:
                         <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="tar压缩包名" addonAfter=".tar"
                                allowClear onChange={(e) => this.setState({
-                            doTrain: {
-                                ...this.state.doTrain,
-                                packageName: `${e.target.value}.tar`,
-                                packageDir: this.state.doChangeAssetsDir ? e.target.value : this.state.doTrain.packageDir,
-                                assetsDir: this.state.doChangeAssetsDir ? e.target.value : this.state.doTrain.assetsDir,
+                            train: {
+                                ...this.state.train,
+                                doTrain: {
+                                    ...this.state.doTrain,
+                                    packageName: `${e.target.value}.tar`,
+                                    packageDir: this.state.doChangeAssetsDir ? e.target.value : this.state.doTrain.packageDir,
+                                    assetsDir: this.state.doChangeAssetsDir ? e.target.value : this.state.doTrain.assetsDir,
+                                }
                             }
                         })}/>
                         解压后的目录名:
                         <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="解压后的目录名"
-                               value={this.state.doTrain.assetsDir}
+                               value={this.state.train.doTrain.assetsDir}
                                allowClear onChange={(e) => this.setState({
                             doChangeAssetsDir: false,
-                            doTrain: {
-                                ...this.state.doTrain,
-                                packageDir: e.target.value, assetsDir: e.target.value
+                            train: {
+                                ...this.state.train,
+                                doTrain: {
+                                    ...this.state.doTrain,
+                                    packageDir: e.target.value, assetsDir: e.target.value
+                                }
                             }
                         })}/>
                         数据格式:
                         <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}}
                                 defaultValue="pascalVOC"
                                 onChange={(value) => this.setState({
-                                    doTrain: {
-                                        ...this.state.doTrain,
-                                        assetsType: value
+                                    train: {
+                                        ...this.state.train,
+                                        doTrain: {
+                                            ...this.state.doTrain,
+                                            assetsType: value
+                                        }
                                     }
                                 })}>
                             <Option value="pascalVOC">pascalVOC</Option>
@@ -830,37 +849,30 @@ class FreeFish extends React.Component {
                         <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}} defaultValue="yolov3"
                                 onChange={(value) => {
                                     console.log("providerType" + value);
+                                    let fImage = "";
+                                    let bImage = "latest";
                                     if (value === "yolov3") {
-                                        this.setState({
-                                            ...this.state,
-                                            baseImage: "darknet_auto-ai-power-v4.0",
-                                            doTrain: {
-                                                ...this.state.doTrain,
-                                                providerType: value,
-                                                image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v4.0`
-                                            }
-                                        });
+                                        fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:";
                                     } else if (value === "fasterRcnn") {
-                                        this.setState({
-                                            ...this.state,
-                                            baseImage: "ai-power-wo-auto-v4.2",
-                                            doTrain: {
-                                                ...this.state.doTrain,
-                                                providerType: value,
-                                                image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-auto-v4.2`
-                                            }
-                                        });
+                                        fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron:";
                                     } else if (value === "maskRcnn") {
-                                        this.setState({
-                                            ...this.state,
-                                            baseImage: "ai-power-wo-auto-v4.2",
+                                        fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron:";
+                                    } else if (value === "other") {
+                                        fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:";
+                                    }
+                                    this.setState({
+                                        ...this.state,
+                                        train: {
+                                            ...this.state.train,
+                                            frontImage: fImage,
+                                            baseImage: bImage,
                                             doTrain: {
                                                 ...this.state.doTrain,
                                                 providerType: value,
-                                                image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-auto-v4.2`
+                                                image: `${fImage}${bImage}`
                                             }
-                                        });
-                                    }
+                                        }
+                                    });
                                 }}>
                             <Option value="yolov3">yolov3</Option>
                             <Option value="fasterRcnn">fasterRcnn</Option>
@@ -868,15 +880,25 @@ class FreeFish extends React.Component {
                             <Option value="other">other</Option>
                         </Select>
                         镜像地址:
-                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="tar压缩包名"
-                               addonBefore="registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:"
-                               defaultValue={this.state.baseImage} allowClear
-                               onChange={(e) => this.setState({
-                                   doTrain: {
-                                       ...this.state.doTrain,
-                                       image: `registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:${e.target.value}`
-                                   }
-                               })}/>
+                        <InputGroup compact>
+                            <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="tar压缩包名"
+                                   addonBefore={this.state.train.frontImage}
+                                   defaultValue={this.state.train.baseImage} allowClear
+                                   onChange={(e) => {
+                                       message.success(this.state.train.frontImage);
+                                       this.setState({
+                                           train: {
+                                               ...this.state.train,
+                                               baseImage: e.target.value,
+                                               doTrain: {
+                                                   ...this.state.doTrain,
+                                                   image: `${this.state.train.frontImage}${e.target.value}`
+                                               }
+                                           }
+                                       })
+                                   }}/>
+                        </InputGroup>
+
                         <div
                             style={{
                                 position: 'absolute',
@@ -898,21 +920,17 @@ class FreeFish extends React.Component {
                                 取消
                             </Button>
                             <Button onClick={() => {
-
-                                console.log(JSON.stringify(this.state.doTrain));
                                 const {dispatch} = this.props;
                                 dispatch({
                                     type: 'service/doTrain',
-                                    payload: this.state.doTrain,
+                                    payload: this.state.train.doTrain,
                                     callback: (v) => {
                                         if (v["res"] === "ok") {
                                             message.success("成功加入训练队列");
                                             this.setState({
+                                                ...this.state,
                                                 rightVisible: false,
                                                 leftVisible: false,
-                                                doTrain: {
-                                                    ...this.state.doTrain,
-                                                }
                                             });
                                         }
                                         else {
