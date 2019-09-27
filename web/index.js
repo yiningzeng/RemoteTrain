@@ -647,62 +647,105 @@ class FreeFish extends React.Component {
                         okButtonProps={{disabled: this.state.continueTrain.weights === undefined}}
                         cancelButtonProps={{disabled: false}}
                     >
-                        <Spin spinning={this.state.continueTrain.loading} tip={"正在加载权重文件"} delay={500}>
-                            图像宽:
-                            <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.width}
-                                   onChange={(value) => this.setState({
-                                       ...this.state,
-                                       continueTrain: {
-                                           ...this.state.continueTrain,
-                                           width: value,
-                                       }
-                                   })}/>
-                            图像高:
-                            <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.height}
-                                   onChange={(value) => this.setState({
-                                       ...this.state,
-                                       continueTrain: {
-                                           ...this.state.continueTrain,
-                                           height: value,
-                                       }
-                                   })}/>
-                            训练最大轮数:
-                            <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.max_batches}
-                                   onChange={(value) => this.setState({
-                                       ...this.state,
-                                       continueTrain: {
-                                           ...this.state.continueTrain,
-                                           max_batches: value,
-                                       }
-                                   })}/>
-                            选择加载的权重文件(如果是梯度爆炸就劲量选择前几个保留的文件):
-                            <Select
-                                style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
-                                onChange={(v)=>{
-                                    this.setState({
-                                        ...this.state,
-                                        continueTrain: {
-                                            ...this.state.continueTrain,
-                                            weights: v
-                                        }
-                                    });
-                                }}>
-                                {modelList.weights_list.map(d => (
-                                    <Option key={d.path}>{d.filename}</Option>
-                                ))}
-                            </Select>
-                            镜像地址:
-                            <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="镜像地址"
-                                   addonBefore={this.state.continueTrain.frontImage}
-                                   value={this.state.continueTrain.baseImage} allowClear
-                                   onChange={(e) => this.setState({
-                                       ...this.state,
-                                       continueTrain: {
-                                           ...this.state.continueTrain,
-                                           image: `${this.state.continueTrain.frontImage}${e.target.value}`
-                                       }
-                                   })}/>
-                        </Spin>
+                        {
+                            this.state.continueTrain.providerType === "yolov3" &&   <Spin spinning={this.state.continueTrain.loading} tip={"正在加载权重文件"} delay={500}>
+                                图像宽:
+                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.width}
+                                             onChange={(value) => this.setState({
+                                                 ...this.state,
+                                                 continueTrain: {
+                                                     ...this.state.continueTrain,
+                                                     width: value,
+                                                 }
+                                             })}/>
+                                图像高:
+                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.height}
+                                             onChange={(value) => this.setState({
+                                                 ...this.state,
+                                                 continueTrain: {
+                                                     ...this.state.continueTrain,
+                                                     height: value,
+                                                 }
+                                             })}/>
+                                训练最大轮数:
+                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.max_batches}
+                                             onChange={(value) => this.setState({
+                                                 ...this.state,
+                                                 continueTrain: {
+                                                     ...this.state.continueTrain,
+                                                     max_batches: value,
+                                                 }
+                                             })}/>
+                                选择加载的权重文件(如果是梯度爆炸就劲量选择前几个保留的文件):
+                                <Select
+                                    style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                    onChange={(v)=>{
+                                        this.setState({
+                                            ...this.state,
+                                            continueTrain: {
+                                                ...this.state.continueTrain,
+                                                weights: v
+                                            }
+                                        });
+                                    }}>
+                                    {modelList.weights_list.map(d => (
+                                        <Option key={d.path}>{d.filename}</Option>
+                                    ))}
+                                </Select>
+                                镜像地址:
+                                <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="镜像地址"
+                                       addonBefore={this.state.continueTrain.frontImage}
+                                       value={this.state.continueTrain.baseImage} allowClear
+                                       onChange={(e) => this.setState({
+                                           ...this.state,
+                                           continueTrain: {
+                                               ...this.state.continueTrain,
+                                               image: `${this.state.continueTrain.frontImage}${e.target.value}`
+                                           }
+                                       })}/>
+                            </Spin>
+                        }
+                        {
+                            (this.state.continueTrain.providerType === "fasterRcnn" || this.state.continueTrain.providerType === "maskRcnn") &&   <Spin spinning={this.state.continueTrain.loading} tip={"正在加载权重文件"} delay={500}>
+                                训练最大轮数:
+                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.max_batches}
+                                             onChange={(value) => this.setState({
+                                                 ...this.state,
+                                                 continueTrain: {
+                                                     ...this.state.continueTrain,
+                                                     max_batches: value,
+                                                 }
+                                             })}/>
+                                选择加载的权重文件(如果是梯度爆炸就劲量选择前几个保留的文件):
+                                <Select
+                                    style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                    onChange={(v)=>{
+                                        this.setState({
+                                            ...this.state,
+                                            continueTrain: {
+                                                ...this.state.continueTrain,
+                                                weights: v
+                                            }
+                                        });
+                                    }}>
+                                    {modelList.weights_list.map(d => (
+                                        <Option key={d.path}>{d.filename}</Option>
+                                    ))}
+                                </Select>
+                                镜像地址:
+                                <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="镜像地址"
+                                       addonBefore={this.state.continueTrain.frontImage}
+                                       value={this.state.continueTrain.baseImage} allowClear
+                                       onChange={(e) => this.setState({
+                                           ...this.state,
+                                           continueTrain: {
+                                               ...this.state.continueTrain,
+                                               image: `${this.state.continueTrain.frontImage}${e.target.value}`
+                                           }
+                                       })}/>
+                            </Spin>
+                        }
+
                     </Modal>
                     <Modal
                         title="参数设置"
