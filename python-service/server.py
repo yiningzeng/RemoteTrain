@@ -469,7 +469,7 @@ def get_train_one():
                     ff.postgres_execute(
                         "UPDATE train_record SET status=%d"
                         "where project_id='%s'" %
-                        (3, train_info['projectId']))
+                        (4, train_info['projectId']))
                     # endregion
                     channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
             log.info("训练：%s Basic.GetOk %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
