@@ -746,6 +746,13 @@ def start_test():
                 docker_volume = data['docker_volume']
                 docker_volume_model = data['docker_volume_model']
 
+            os.system('cp %s/yolov3-voc.cfg %s/yolov3-voc-test.cfg' % (
+                ff.package_base_path + "/" + data["assetsDir"],
+                ff.package_base_path + "/" + data["assetsDir"]))
+
+            os.system('sed -i "s/^batch.*/batch=1/g" %s/yolov3-voc-test.cfg' % (ff.package_base_path + "/" + data["assetsDir"]))
+            os.system('sed -i "s/^subdivisions.*/subdivisions=1/g" %s/yolov3-voc-test.cfg' % (ff.package_base_path + "/" + data["assetsDir"]))
+
             os.system("echo '%s' | sudo -S docker stop '%s'" % (ff.root_password, docker_name))
             cmd = "echo %s | sudo -S docker run --gpus '\"device=5\"' \
                         --name %s \
