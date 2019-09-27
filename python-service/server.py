@@ -791,6 +791,102 @@ def start_test():
     return Response(json.dumps({"res": "ok", "msg": "开启成功"}), mimetype='application/json')
 
 
+@app.route('/stop_train', methods=['POST'])
+def stop_train_http():
+    try:
+        data = request.json
+        if data is not None:
+            cmd = "echo '%s' | sudo -S docker stop `cat '%s/%s/train.dname'`" % (
+                ff.root_password, ff.package_base_path, data['assetsDir'])
+            log.info('停止训练:%s' % cmd)
+            os.system(cmd)  # 会自动退出，所以这里不需要了
+            ff.postgres_execute("UPDATE train_record SET "
+                                "status=%d WHERE project_id='%s'" %
+                                (3, data['projectId']))
+    except Exception as e:
+        log.error(e)
+        return Response(json.dumps({"res": "err"}), mimetype='application/json')
+    return Response(json.dumps({"res": "ok"}), mimetype='application/json')
+
+
+@app.route('/restart_train', methods=['POST'])
+def restart_train_http():
+    try:
+        data = request.json
+        if data is not None:
+            trainInfo = {"projectId": data["projectId"],
+                         "projectName": data["projectId"],
+                         "assetsDir": data["assetsDir"],
+                         "assetsType": data["assetsType"],
+                         "providerType": data["providerType"],
+                         "providerOptions": {"yolov3Image": data["image"]}
+                         }
+
+            if "width" in data:
+               os.system('sed -i "s/^width.*/width=%s/g" %s/yolov3-voc.cfg' % (
+                   data["width"], ff.package_base_path + "/" + data["assetsDir"]))
+            if "height" in data:
+                os.system('sed -i "s/^height.*/height=%s/g" %s/yolov3-voc.cfg' % (
+                data["height"], ff.package_base_path + "/" + data["assetsDir"]))
+            if "max_batches" in data:
+                os.system('sed -i "s/^max_batches.*/max_batches=%d/g" %s/yolov3-voc.cfg' % (
+                    data["max_batches"], ff.package_base_path + "/" + data["assetsDir"]))
+                os.system('sed -i "s/^steps.*/steps=%d,%d/g" %s/yolov3-voc.cfg' % (
+                    int(int(data["max_batches"]) * 0.8), int(int(data["max_batches"]) * 0.9), ff.package_base_path + "/" + data["assetsDir"]))
+            # config.write(open("test.cfg", "w"))
+            docker_volume = "/darknet/assets"
+            docker_volume_model = "/darknet/assets/backup/yolov3-voc_last.weights"
+            if data['providerType'] == 'yolov3':
+                docker_volume = "/darknet/assets"
+                docker_volume_model = "/darknet/assets/backup/yolov3-voc_last.weights"
+            elif data['providerType'] == 'fasterRcnn':
+                trainInfo["providerOptions"] = {"fasterRcnnImage": data["image"]}
+                docker_volume = "/Detectron/detectron/datasets/data"
+                docker_volume_model = "/Detectron/detectron/datasets/data/result/train/coco_2014_train/generalized_rcnn/server.pkl"
+            elif data['providerType'] == 'maskRcnn':
+                trainInfo["providerOptions"] = {"maskRcnnImage": data["image"]}
+                docker_volume = "/Detectron/detectron/datasets/data"
+                docker_volume_model = "/Detectron/detectron/datasets/data/result/train/coco_2014_train/generalized_rcnn/server.pkl"
+            elif data['providerType'] == 'other':
+                trainInfo["providerOptions"] = {"otherImage": data["image"]}
+                docker_volume = data['docker_volume']
+                docker_volume_model = data['docker_volume_model']
+
+            if "yolov3-voc_last.weights" not in data["assetsDir"]:
+                os.system("echo %s | sudo -s rm %s/backup/yolov3-voc_last.weights" % (ff.root_password, ff.package_base_path + "/" + data["assetsDir"]))
+            os.system("echo %s | sudo -s rm %s/train_log/convert_data.log" % (ff.root_password, ff.package_base_path + "/" + data["assetsDir"]))
+
+            # 写入正在训练，否则队列会重新执行
+            os.system("echo '正在训练\c' > '%s/%s/train_status.log'" %
+                      (ff.package_base_path, data["assetsDir"]))
+
+            # 加入到训练队列
+            do_basic_publish('ai.train.topic', "train.start.%s" % data['projectId'], json.dumps(trainInfo))
+
+            cmd = "echo %s | sudo -S docker run --gpus all \
+                        --name %s \
+                        -v /etc/localtime:/etc/localtime:ro \
+                        -v '%s':'%s' \
+                        -v '%s':'%s' \
+                        --add-host service-postgresql:10.10.0.4 \
+                        --add-host service-rabbitmq:10.10.0.3 \
+                        --add-host service-ftp:10.10.0.2 \
+                        --add-host service-web:10.10.0.5 \
+                        --rm -d %s" % (
+                ff.root_password,
+                data['projectId'].replace("_", ""),
+                ff.package_base_path + "/" + data["assetsDir"], docker_volume,
+                data["weights"], docker_volume_model,
+                data["image"])
+            log.info("\n\n**************************\n重新训练: %s\n**************************\n" % cmd)
+            os.system(cmd)
+            ff.postgres_execute("UPDATE train_record SET "
+                                "status=%d WHERE project_id='%s'" %
+                                (2, data['projectId']))
+    except Exception as e:
+        log.error(e)
+        return Response(json.dumps({"res": "err"}), mimetype='application/json')
+    return Response(json.dumps({"res": "ok"}), mimetype='application/json')
 # endregion
 
 
