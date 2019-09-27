@@ -3,17 +3,17 @@ import ReactDOM from 'react-dom';
 import Iframe from 'react-iframe';
 
 import dva, { connect } from 'dva';
-import { Tag, Row, Modal, Spin, Col, Table, message, PageHeader, Button, Typography, Drawer, Divider, Icon, Card , Select, Switch, Form, Input, DatePicker} from 'antd';
+import { InputNumber, Tag, Row, Modal, Spin, Col, Table, message, PageHeader, Button, Typography, Drawer, Divider, Icon, Card , Select, Switch, Form, Input, DatePicker} from 'antd';
 // 由于 antd 组件的默认文案是英文，所以需要修改为中文
 import zhCN from 'antd/lib/locale-provider/zh_CN';
 import moment from 'moment';
 import 'moment/locale/zh-cn';
-import { getList, getModelList, doTrain, startTest } from './services/api';
+import { getList, getModelList, doTrain, startTest, stopTrain, continueTrainTrain } from './services/api';
 const { Title, Paragraph, Text } = Typography;
 const { Option } = Select;
 const InputGroup = Input.Group;
 moment.locale('zh-cn');
-
+const { confirm } = Modal;
 class FreeFish extends React.Component {
     state = {
         test: {
@@ -70,6 +70,20 @@ class FreeFish extends React.Component {
                 providerType: "yolov3", // 框架的类型yolov3 fasterRcnn maskRcnn
                 image: "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:latest", // 镜像路径
             },
+        },
+        continueTrain: {
+            showModal: false,
+            loading: false,
+            frontImage: "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:",
+            baseImage: "latest",
+            width: undefined,
+            height: undefined,
+            max_batches: undefined,
+            projectId: undefined, // 项目id
+            providerType: "yolov3", // 框架的类型yolov3 fasterRcnn maskRcnn
+            image: "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:latest", // 镜像路径
+            assetsDir: "", //nowAssetsDir
+            weights: undefined,
         }
     };
 
@@ -224,7 +238,8 @@ class FreeFish extends React.Component {
                 if (v === 0) return <Tag color="#A9A9A9">等待解包</Tag>;
                 else if (v === 1) return <Tag color="#f50">解包完成</Tag>;
                 else if (v === 2) return <Button type="danger" loading>正在训练</Button>;
-                else if (v === 3) return <div><Tag color="#008000">训练完成</Tag><Icon type="smile" theme="twoTone"/></div>;
+                else if (v === 3) return <Tag color="#A9A9A9">暂停训练</Tag>;
+                else if (v === 4) return <div><Tag color="#008000">训练完成</Tag><Icon type="smile" theme="twoTone"/></div>;
                 else if (v === -1) return <Tag color="#708090">训练出错</Tag>;
                 else return <Tag>未知</Tag>;
             }
@@ -341,7 +356,7 @@ class FreeFish extends React.Component {
                             train: {
                                 ...this.state.train,
                                 doTrain: {
-                                    ...this.state.doTrain,
+                                    ...this.state.train.doTrain,
                                     projectId: moment().format('x')
                                 }
                             }
@@ -363,9 +378,111 @@ class FreeFish extends React.Component {
                                                        message.success(`待完善， ${c}`)
                                                    }}/>
                                            <Button type="primary" size="small" style={{marginLeft: 10}}
-                                                   disabled={record.status !== 2}>停止训练</Button>
+                                                   disabled={record.status !== 2} onClick={() => {
+                                               confirm({
+                                                   title: '提示',
+                                                   content: '确定要停止训练么?',
+                                                   onOk: () => {
+                                                       const {dispatch} = this.props;
+                                                       dispatch({
+                                                           type: 'service/stopTrain',
+                                                           payload: {
+                                                               projectId: record.project_id,
+                                                               assetsDir: record.assets_directory_name
+                                                           },
+                                                           callback: (v) => {
+                                                               if (v.res === "ok") {
+                                                                   message.success("已经停止训练");
+                                                                   dispatch({
+                                                                       type: 'service/getList',
+                                                                       payload: {
+                                                                           page: this.state.pagination.current,
+                                                                           num: this.state.pagination.defaultPageSize,
+                                                                       },
+                                                                       callback: (v) => {
+                                                                           console.log(`加载：${JSON.stringify(v)}`);
+                                                                           this.setState({
+                                                                               ...this.state,
+                                                                               refreshTime: moment().format("YYYY-MM-DD HH:mm:ss"),
+                                                                               pagination:{
+                                                                                   ...this.state.pagination,
+                                                                                   total: v["total"],
+                                                                                   pageSize: v["num"],
+                                                                               }
+                                                                           });
+                                                                       },
+                                                                   });
+                                                               } else {
+                                                                   message.error("停止训练失败");
+                                                               }
+                                                           }
+                                                       });
+                                                   },
+                                                   onCancel() {},
+                                               });
+                                           }}>停止训练</Button>
                                            <Button type="primary" size="small" style={{marginLeft: 10}}
-                                                   disabled={record.status !== 2}>继续训练</Button>
+                                                   disabled={record.status === 4 || record.status === 2} onClick={() => {
+                                               this.setState(
+                                                   {
+                                                       ...this.state,
+                                                       continueTrain: {
+                                                           ...this.state.continueTrain,
+                                                           loading: true,
+                                                           showModal: true,
+                                                       }
+                                                   },
+                                                   () => {
+                                                       const {dispatch} = this.props;
+                                                       dispatch({
+                                                           type: 'service/getModelList',
+                                                           payload: {
+                                                               type: record.net_framework,
+                                                               path: encodeURI(record.assets_directory_name)
+                                                           },
+                                                           callback: (v) => {
+
+                                                               let fImage = "";
+                                                               let bImage = "latest";
+                                                               // let port = 8100;
+                                                               // let javaUrl = "";
+                                                               // let javaPort = 888;
+                                                               if (record.net_framework === "yolov3") {
+                                                                   // port = 8100;
+                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:";
+                                                                   // javaUrl = "ai.8101.api.qtingvision.com";
+                                                               } else if (record.net_framework === "fasterRcnn") {
+                                                                   // port = 8200;
+                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron:";
+                                                                   // javaUrl = "ai.8101.api.qtingvision.com";
+                                                               } else if (record.net_framework === "maskRcnn") {
+                                                                   // port = 8300;
+                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron:";
+                                                                   // javaUrl = "ai.8101.api.qtingvision.com";
+                                                               } else if (record.net_framework === "other") {
+                                                                   // port = 8400;
+                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:";
+                                                                   // javaUrl = "ai.8401.api.qtingvision.com";
+                                                               }
+
+                                                               this.setState({
+                                                                   ...this.state,
+                                                                   continueTrain: {
+                                                                       ...this.state.continueTrain,
+                                                                       loading: false,
+                                                                       frontImage: fImage,
+                                                                       baseImage: bImage,
+                                                                       showModal: true,
+                                                                       projectId: record.project_id,
+                                                                       providerType: record.net_framework,
+                                                                       assetsDir: record.assets_directory_name, //nowAssetsDir
+                                                                       image: `${fImage}${bImage}`,
+                                                                   }
+                                                               });
+                                                           },
+                                                       });
+                                                   });
+                                           }}>继续训练</Button>
                                            <Button type="primary" size="small" style={{marginLeft: 10}} onClick={() => {
                                                this.setState(
                                                    {
@@ -440,7 +557,7 @@ class FreeFish extends React.Component {
                                        <Row>
                                            <Iframe url={record.draw_url}
                                                    width="100%"
-                                                   height="300px"
+                                                   height="500px"
                                                    id="myId"
                                                    frameBorder={0}
                                                    className="myClassname"
@@ -458,6 +575,103 @@ class FreeFish extends React.Component {
             >
                 <div className="wrap">
 
+                    <Modal
+                        title="继续训练"
+                        okText="开始"
+                        cancelText="取消"
+                        destroyOnClose
+                        width={1000}
+                        visible={this.state.continueTrain.showModal}
+                        onOk={() => {
+                            const {dispatch} = this.props;
+                            this.setState({
+                                    ...this.state,
+                                    continueTrain: {
+                                        ...this.state.continueTrain,
+                                    }
+                                },
+                                () => {
+                                    dispatch({
+                                        type: 'service/continueTrainTrain',
+                                        payload: {
+                                            ...this.state.continueTrain
+                                        },
+                                        callback: (v) => {
+                                            if (v.res !== "ok") {
+                                                message.error(v.msg);
+                                            }
+                                        }});
+                                });
+                        }}
+                        onCancel={() => {
+                            this.setState({
+                                ...this.state,
+                                continueTrain: {
+                                    ...this.state.continueTrain,
+                                    showModal: false,
+                                }
+                            });
+                        }}
+                        okButtonProps={{disabled: this.state.continueTrain.weights === undefined}}
+                        cancelButtonProps={{disabled: false}}
+                    >
+                        <Spin spinning={this.state.continueTrain.loading} tip={"正在加载权重文件"} delay={500}>
+                            图像宽:
+                            <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.width} defaultValue={modelList.width}
+                                   onChange={(value) => this.setState({
+                                       ...this.state,
+                                       continueTrain: {
+                                           ...this.state.continueTrain,
+                                           width: value,
+                                       }
+                                   })}/>
+                            图像高:
+                            <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.height} defaultValue={modelList.height}
+                                   onChange={(value) => this.setState({
+                                       ...this.state,
+                                       continueTrain: {
+                                           ...this.state.continueTrain,
+                                           height: value,
+                                       }
+                                   })}/>
+                            训练最大轮数:
+                            <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.max_batches} defaultValue={modelList.max_batches}
+                                   onChange={(value) => this.setState({
+                                       ...this.state,
+                                       continueTrain: {
+                                           ...this.state.continueTrain,
+                                           max_batches: value,
+                                       }
+                                   })}/>
+                            选择加载的权重文件(如果是梯度爆炸就劲量选择前几个保留的文件):
+                            <Select
+                                style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                onChange={(v)=>{
+                                    this.setState({
+                                        ...this.state,
+                                        continueTrain: {
+                                            ...this.state.continueTrain,
+                                            weights: v
+                                        }
+                                    });
+                                }}>
+                                {modelList.weights_list.map(d => (
+                                    <Option key={d.path}>{d.filename}</Option>
+                                ))}
+                            </Select>
+                            镜像地址:
+                            <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="镜像地址"
+                                   addonBefore={this.state.continueTrain.frontImage}
+                                   value={this.state.continueTrain.baseImage} allowClear
+                                   onChange={(e) => this.setState({
+                                       ...this.state,
+                                       continueTrain: {
+                                           ...this.state.continueTrain,
+                                           image: `${this.state.continueTrain.frontImage}${e.target.value}`
+                                       }
+                                   })}/>
+                        </Spin>
+                    </Modal>
                     <Modal
                         title="参数设置"
                         okText="打开测试服务"
@@ -584,7 +798,7 @@ class FreeFish extends React.Component {
                     >
                         <Iframe url={this.state.test.showTestDrawerUrl}
                                 width="100%"
-                                height="800px"
+                                height="450px"
                                 id="myId"
                                 frameBorder={0}
                                 className="myClassname"
@@ -787,7 +1001,7 @@ class FreeFish extends React.Component {
                             train: {
                                 ...this.state.train,
                                 doTrain: {
-                                    ...this.state.doTrain,
+                                    ...this.state.train.doTrain,
                                     projectId: e.target.value
                                 }
                             }
@@ -798,7 +1012,7 @@ class FreeFish extends React.Component {
                             train: {
                                 ...this.state.train,
                                 doTrain: {
-                                    ...this.state.doTrain,
+                                    ...this.state.train.doTrain,
                                     projectName: e.target.value
                                 }
                             }
@@ -809,10 +1023,10 @@ class FreeFish extends React.Component {
                             train: {
                                 ...this.state.train,
                                 doTrain: {
-                                    ...this.state.doTrain,
+                                    ...this.state.train.doTrain,
                                     packageName: `${e.target.value}.tar`,
-                                    packageDir: this.state.doChangeAssetsDir ? e.target.value : this.state.doTrain.packageDir,
-                                    assetsDir: this.state.doChangeAssetsDir ? e.target.value : this.state.doTrain.assetsDir,
+                                    packageDir: this.state.doChangeAssetsDir ? e.target.value : this.state.train.doTrain.packageDir,
+                                    assetsDir: this.state.doChangeAssetsDir ? e.target.value : this.state.train.doTrain.assetsDir,
                                 }
                             }
                         })}/>
@@ -824,7 +1038,7 @@ class FreeFish extends React.Component {
                             train: {
                                 ...this.state.train,
                                 doTrain: {
-                                    ...this.state.doTrain,
+                                    ...this.state.train.doTrain,
                                     packageDir: e.target.value, assetsDir: e.target.value
                                 }
                             }
@@ -836,7 +1050,7 @@ class FreeFish extends React.Component {
                                     train: {
                                         ...this.state.train,
                                         doTrain: {
-                                            ...this.state.doTrain,
+                                            ...this.state.train.doTrain,
                                             assetsType: value
                                         }
                                     }
@@ -867,7 +1081,7 @@ class FreeFish extends React.Component {
                                             frontImage: fImage,
                                             baseImage: bImage,
                                             doTrain: {
-                                                ...this.state.doTrain,
+                                                ...this.state.train.doTrain,
                                                 providerType: value,
                                                 image: `${fImage}${bImage}`
                                             }
@@ -891,7 +1105,7 @@ class FreeFish extends React.Component {
                                                ...this.state.train,
                                                baseImage: e.target.value,
                                                doTrain: {
-                                                   ...this.state.doTrain,
+                                                   ...this.state.train.doTrain,
                                                    image: `${this.state.train.frontImage}${e.target.value}`
                                                }
                                            }
@@ -974,9 +1188,15 @@ app.model({
         modelList: {
             res: '',
             weights_list: [],
+            width: undefined,
+            height: undefined,
+            max_batches: undefined,
         },
         dotrain:{},
         testRes: {
+            res: '',
+        },
+        allres: {
             res: '',
         }
     },
@@ -1012,6 +1232,22 @@ app.model({
                 payload: response,
             });
             if (callback)callback(response);
+        },
+        *stopTrain({ payload,callback}, { call, put }) {
+            const response = yield call(stopTrain,payload);
+            yield put({
+                type: 'allres',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
+        *continueTrainTrain({ payload,callback}, { call, put }) {
+            const response = yield call(continueTrainTrain,payload);
+            yield put({
+                type: 'allres',
+                payload: response,
+            });
+            if (callback)callback(response);
         }
     },
     reducers: {
@@ -1043,6 +1279,12 @@ app.model({
             return {
                 ...state,
                 testRes: action.payload,
+            };
+        },
+        allres(state, action) {
+            return {
+                ...state,
+                allres: action.payload,
             };
         },
     },

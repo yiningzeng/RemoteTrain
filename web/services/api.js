@@ -30,3 +30,17 @@ export async function startTest(params) {
     });
 }
 
+export async function stopTrain(params) {
+    return request(`http://${ip}/stop_train`, {
+        method: 'POST',
+        body: params
+    });
+}
+
+export async function continueTrainTrain(params) {
+    return request(`http://${ip}/restart_train`, {
+        method: 'POST',
+        body: params
+    });
+}
+
