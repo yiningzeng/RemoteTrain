@@ -51,7 +51,6 @@ log.basicConfig(level=log.INFO,  # 控制台打印的日志级别
                 )
 
 
-
 class pikaqiu(object):
 
     def __init__(self, root_password='icubic-123', host='localhost', port=5672,
@@ -458,6 +457,10 @@ def get_train_one():
                 elif "正在训练" in status:
                     channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
                 elif "训练失败" in status:
+                    ff.postgres_execute(
+                        "UPDATE train_record SET status=%d"
+                        "where project_id='%s'" %
+                        (-1, train_info['projectId']))
                     channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
                 elif "训练完成" in status:
                     # region 更新数据库
