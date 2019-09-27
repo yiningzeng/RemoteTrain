@@ -770,7 +770,7 @@ def start_test():
                         --rm -d %s" % (
                 ff.root_password,
                 docker_name,
-                port+1,
+                port + 1,
                 port, port,
                 ff.package_base_path + "/" + data["assetsDir"], docker_volume,
                 data["weights"], docker_volume_model,
