@@ -870,6 +870,7 @@ def restart_train_http():
 
             if "yolov3-voc_last.weights" not in data["assetsDir"]:
                 os.system("echo %s | sudo -s rm %s/backup/yolov3-voc_last.weights" % (ff.root_password, ff.package_base_path + "/" + data["assetsDir"]))
+            # 删除数据转换的状态文件
             os.system("echo %s | sudo -s rm %s/train_log/convert_data.log" % (ff.root_password, ff.package_base_path + "/" + data["assetsDir"]))
 
             # 写入正在训练，否则队列会重新执行

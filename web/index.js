@@ -443,7 +443,6 @@ class FreeFish extends React.Component {
                                                                path: encodeURI(record.assets_directory_name)
                                                            },
                                                            callback: (v) => {
-
                                                                let fImage = "";
                                                                let bImage = "latest";
                                                                // let port = 8100;
