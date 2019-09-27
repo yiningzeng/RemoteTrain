@@ -815,7 +815,7 @@ def restart_train_http():
         data = request.json
         if data is not None:
             trainInfo = {"projectId": data["projectId"],
-                         "projectName": data["projectId"],
+                         "projectName": data["projectName"],
                          "assetsDir": data["assetsDir"],
                          "assetsType": data["assetsType"],
                          "providerType": data["providerType"],
@@ -878,6 +878,9 @@ def restart_train_http():
                 ff.package_base_path + "/" + data["assetsDir"], docker_volume,
                 data["weights"], docker_volume_model,
                 data["image"])
+            os.system("echo '%s\c' > '%s/%s/train.dname'" %
+                      (data['projectId'].replace("_", ""), ff.package_base_path, data["assetsDir"]))
+
             log.info("\n\n**************************\n重新训练: %s\n**************************\n" % cmd)
             os.system(cmd)
             ff.postgres_execute("UPDATE train_record SET "
