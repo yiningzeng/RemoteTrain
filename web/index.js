@@ -80,6 +80,8 @@ class FreeFish extends React.Component {
             height: undefined,
             max_batches: undefined,
             projectId: undefined, // 项目id
+            assetsType: "pascalVoc", // 素材的类型，pascalVoc和coco和other
+            projectName: undefined, // 项目名称
             providerType: "yolov3", // 框架的类型yolov3 fasterRcnn maskRcnn
             image: "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:latest", // 镜像路径
             assetsDir: "", //nowAssetsDir
@@ -238,7 +240,7 @@ class FreeFish extends React.Component {
                 if (v === 0) return <Tag color="#A9A9A9">等待解包</Tag>;
                 else if (v === 1) return <Tag color="#f50">解包完成</Tag>;
                 else if (v === 2) return <Button type="danger" loading>正在训练</Button>;
-                else if (v === 3) return <Tag color="#A9A9A9">暂停训练</Tag>;
+                else if (v === 3) return <Tag color="#800080">暂停训练</Tag>;
                 else if (v === 4) return <div><Tag color="#008000">训练完成</Tag><Icon type="smile" theme="twoTone"/></div>;
                 else if (v === -1) return <Tag color="#708090">训练出错</Tag>;
                 else return <Tag>未知</Tag>;
@@ -422,7 +424,7 @@ class FreeFish extends React.Component {
                                                });
                                            }}>停止训练</Button>
                                            <Button type="primary" size="small" style={{marginLeft: 10}}
-                                                   disabled={record.status === 4 || record.status === 2} onClick={() => {
+                                                   disabled={record.status === 2} onClick={() => {
                                                this.setState(
                                                    {
                                                        ...this.state,
@@ -473,6 +475,8 @@ class FreeFish extends React.Component {
                                                                        frontImage: fImage,
                                                                        baseImage: bImage,
                                                                        showModal: true,
+                                                                       assetsType: record.assets_type, // 素材的类型，pascalVoc和coco和other
+                                                                       projectName: record.project_name, // 项目名称
                                                                        projectId: record.project_id,
                                                                        providerType: record.net_framework,
                                                                        assetsDir: record.assets_directory_name, //nowAssetsDir
@@ -599,6 +603,34 @@ class FreeFish extends React.Component {
                                         callback: (v) => {
                                             if (v.res !== "ok") {
                                                 message.error(v.msg);
+                                            } else {
+                                                this.setState({
+                                                    ...this.state,
+                                                    continueTrain: {
+                                                        ...this.state.continueTrain,
+                                                        showModal: false,
+                                                        loading: false,
+                                                    }
+                                                });
+                                                dispatch({
+                                                    type: 'service/getList',
+                                                    payload: {
+                                                        page: this.state.pagination.current,
+                                                        num: this.state.pagination.defaultPageSize,
+                                                    },
+                                                    callback: (v) => {
+                                                        console.log(`加载：${JSON.stringify(v)}`);
+                                                        this.setState({
+                                                            ...this.state,
+                                                            refreshTime: moment().format("YYYY-MM-DD HH:mm:ss"),
+                                                            pagination:{
+                                                                ...this.state.pagination,
+                                                                total: v["total"],
+                                                                pageSize: v["num"],
+                                                            }
+                                                        });
+                                                    },
+                                                });
                                             }
                                         }});
                                 });
@@ -617,7 +649,7 @@ class FreeFish extends React.Component {
                     >
                         <Spin spinning={this.state.continueTrain.loading} tip={"正在加载权重文件"} delay={500}>
                             图像宽:
-                            <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.width} defaultValue={modelList.width}
+                            <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.width}
                                    onChange={(value) => this.setState({
                                        ...this.state,
                                        continueTrain: {
@@ -626,7 +658,7 @@ class FreeFish extends React.Component {
                                        }
                                    })}/>
                             图像高:
-                            <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.height} defaultValue={modelList.height}
+                            <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.height}
                                    onChange={(value) => this.setState({
                                        ...this.state,
                                        continueTrain: {
@@ -635,7 +667,7 @@ class FreeFish extends React.Component {
                                        }
                                    })}/>
                             训练最大轮数:
-                            <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.max_batches} defaultValue={modelList.max_batches}
+                            <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.max_batches}
                                    onChange={(value) => this.setState({
                                        ...this.state,
                                        continueTrain: {
