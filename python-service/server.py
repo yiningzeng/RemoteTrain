@@ -706,12 +706,18 @@ def get_model_list(framework_type, path):
         search_path = "/assets/%s/result/train/coco_2014_train/generalized_rcnn/*.pkl"
     elif framework_type == 'other':
         search_path = "不支持，后续开发"
-    for item in sorted(glob.glob(search_path % path), key=os.path.getmtime, reverse=True):  # key 根据时间排序 reverse true表示倒叙
+    cmd = "sed -n '/width/p' %s/yolov3-voc.cfg | sed 's/width//g' |sed 's/=//g' |sed 's/ //g'" % (ff.package_base_path + "/" + path)
+    width = os.popen(cmd).read().replace('\n', '')
+    height = os.popen("sed -n '/height/p' %s/yolov3-voc.cfg | sed 's/height//g' |sed 's/=//g' |sed 's/ //g'" % (ff.package_base_path + "/" + path)).read().replace('\n', '')
+    max_batches = os.popen("sed -n '/max_batches/p' %s/yolov3-voc.cfg | sed 's/max_batches//g' |sed 's/=//g' |sed 's/ //g'" % (ff.package_base_path + "/" + path)).read().replace('\n', '')
+    for item in sorted(glob.glob(search_path % path), key=os.path.getmtime,
+                       reverse=True):  # key 根据时间排序 reverse true表示倒叙
         filepath, tempfilename = os.path.split(item)
         if "server.pkl" in tempfilename or "test.weights" in tempfilename:
             continue
         weights_list.append({"path": item, "filename": tempfilename})
-    return Response(json.dumps({"res": "ok", "weights_list": weights_list}), mimetype='application/json')
+
+    return Response(json.dumps({"res": "ok", "weights_list": weights_list, "width": width, "height": height, "max_batches": max_batches}), mimetype='application/json')
 
 
 @app.route('/start_test', methods=['POST'])
