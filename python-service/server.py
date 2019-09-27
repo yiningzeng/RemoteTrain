@@ -696,20 +696,29 @@ def get_train_list_http():
 @app.route('/get_model_list/<framework_type>/<path>', methods=['GET'])
 def get_model_list(framework_type, path):
     weights_list = []
+    width = 0
+    height = 0
+    max_batches = 0
     # framework_type = "yolov3"
     search_path = "/assets/%s/backup/*.weights"
     if framework_type == 'yolov3':
         search_path = "/assets/%s/backup/*.weights"
-    elif framework_type == 'fasterRcnn':
+        cmd = "sed -n '/width/p' %s/yolov3-voc.cfg | sed 's/width//g' |sed 's/=//g' |sed 's/ //g'" % (
+                    ff.package_base_path + "/" + path)
+        width = os.popen(cmd).read().replace('\n', '')
+        height = os.popen("sed -n '/height/p' %s/yolov3-voc.cfg | sed 's/height//g' |sed 's/=//g' |sed 's/ //g'" % (
+                    ff.package_base_path + "/" + path)).read().replace('\n', '')
+        max_batches = os.popen(
+            "sed -n '/max_batches/p' %s/yolov3-voc.cfg | sed 's/max_batches//g' |sed 's/=//g' |sed 's/ //g'" % (
+                        ff.package_base_path + "/" + path)).read().replace('\n', '')
+    elif framework_type == 'fasterRcnn' or framework_type == 'maskRcnn':
         search_path = "/assets/%s/result/train/coco_2014_train/generalized_rcnn/*.pkl"
-    elif framework_type == 'maskRcnn':
-        search_path = "/assets/%s/result/train/coco_2014_train/generalized_rcnn/*.pkl"
+        max_batches = os.popen(
+            "sed -n '/MAX_ITER/p' %s/train-config.yaml | sed 's/MAX_ITER//g' |sed 's/://g' |sed 's/ //g'" % (
+                    ff.package_base_path + "/" + path)).read().replace('\n', '')
     elif framework_type == 'other':
         search_path = "不支持，后续开发"
-    cmd = "sed -n '/width/p' %s/yolov3-voc.cfg | sed 's/width//g' |sed 's/=//g' |sed 's/ //g'" % (ff.package_base_path + "/" + path)
-    width = os.popen(cmd).read().replace('\n', '')
-    height = os.popen("sed -n '/height/p' %s/yolov3-voc.cfg | sed 's/height//g' |sed 's/=//g' |sed 's/ //g'" % (ff.package_base_path + "/" + path)).read().replace('\n', '')
-    max_batches = os.popen("sed -n '/max_batches/p' %s/yolov3-voc.cfg | sed 's/max_batches//g' |sed 's/=//g' |sed 's/ //g'" % (ff.package_base_path + "/" + path)).read().replace('\n', '')
+
     for item in sorted(glob.glob(search_path % path), key=os.path.getmtime,
                        reverse=True):  # key 根据时间排序 reverse true表示倒叙
         filepath, tempfilename = os.path.split(item)
@@ -822,31 +831,38 @@ def restart_train_http():
                          "providerOptions": {"yolov3Image": data["image"]}
                          }
 
-            if "width" in data:
-               os.system('sed -i "s/^width.*/width=%s/g" %s/yolov3-voc.cfg' % (
-                   data["width"], ff.package_base_path + "/" + data["assetsDir"]))
-            if "height" in data:
-                os.system('sed -i "s/^height.*/height=%s/g" %s/yolov3-voc.cfg' % (
-                data["height"], ff.package_base_path + "/" + data["assetsDir"]))
-            if "max_batches" in data:
-                os.system('sed -i "s/^max_batches.*/max_batches=%d/g" %s/yolov3-voc.cfg' % (
-                    data["max_batches"], ff.package_base_path + "/" + data["assetsDir"]))
-                os.system('sed -i "s/^steps.*/steps=%d,%d/g" %s/yolov3-voc.cfg' % (
-                    int(int(data["max_batches"]) * 0.8), int(int(data["max_batches"]) * 0.9), ff.package_base_path + "/" + data["assetsDir"]))
+
             # config.write(open("test.cfg", "w"))
             docker_volume = "/darknet/assets"
             docker_volume_model = "/darknet/assets/backup/yolov3-voc_last.weights"
             if data['providerType'] == 'yolov3':
                 docker_volume = "/darknet/assets"
                 docker_volume_model = "/darknet/assets/backup/yolov3-voc_last.weights"
-            elif data['providerType'] == 'fasterRcnn':
+
+                if "width" in data:
+                    os.system('sed -i "s/^width.*/width=%s/g" %s/yolov3-voc.cfg' % (
+                        data["width"], ff.package_base_path + "/" + data["assetsDir"]))
+                if "height" in data:
+                    os.system('sed -i "s/^height.*/height=%s/g" %s/yolov3-voc.cfg' % (
+                        data["height"], ff.package_base_path + "/" + data["assetsDir"]))
+                if "max_batches" in data:
+                    os.system('sed -i "s/^max_batches.*/max_batches=%d/g" %s/yolov3-voc.cfg' % (
+                        data["max_batches"], ff.package_base_path + "/" + data["assetsDir"]))
+                    os.system('sed -i "s/^steps.*/steps=%d,%d/g" %s/yolov3-voc.cfg' % (
+                        int(int(data["max_batches"]) * 0.8), int(int(data["max_batches"]) * 0.9),
+                        ff.package_base_path + "/" + data["assetsDir"]))
+
+            elif data['providerType'] == 'fasterRcnn' or data['providerType'] == 'maskRcnn':
                 trainInfo["providerOptions"] = {"fasterRcnnImage": data["image"]}
                 docker_volume = "/Detectron/detectron/datasets/data"
-                docker_volume_model = "/Detectron/detectron/datasets/data/result/train/coco_2014_train/generalized_rcnn/server.pkl"
-            elif data['providerType'] == 'maskRcnn':
-                trainInfo["providerOptions"] = {"maskRcnnImage": data["image"]}
-                docker_volume = "/Detectron/detectron/datasets/data"
-                docker_volume_model = "/Detectron/detectron/datasets/data/result/train/coco_2014_train/generalized_rcnn/server.pkl"
+                docker_volume_model = "/Detectron/models/R-50.pkl"
+
+                if "max_batches" in data: # fasterRcnn 和 maskRcnn 暂时不先替换掉steps
+                    os.system('sed -i "s/    MAX_ITER.*/    MAX_ITER: %d/g" %s/train-config.yaml' % (
+                        data["max_batches"], ff.package_base_path + "/" + data["assetsDir"]))
+                    # os.system('sed -i "s/^STEPS.*/steps=%d,%d/g" %s/yolov3-voc.cfg' % (
+                    #     int(int(data["max_batches"]) * 0.8), int(int(data["max_batches"]) * 0.9),
+                    #     ff.package_base_path + "/" + data["assetsDir"]))
             elif data['providerType'] == 'other':
                 trainInfo["providerOptions"] = {"otherImage": data["image"]}
                 docker_volume = data['docker_volume']
