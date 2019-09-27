@@ -9,6 +9,7 @@ from PIL import Image
 from kmeans import kmeans
 from os import listdir, getcwd
 from os.path import join
+import imghdr
 
 sets = []
 
@@ -200,6 +201,10 @@ if __name__ == '__main__':
                 continue
             if not os.path.exists('%s/JPEGImages/%s' % (args.voc_dir, image_id)):
                 # print("%s.xml丢失" % filename)
+                lose = lose + 1
+                continue
+            if imghdr.what('%s/JPEGImages/%s' % (args.voc_dir, image_id)) is None:
+                # 完美解决梯度爆炸的问题
                 lose = lose + 1
                 continue
             # print(image_id)

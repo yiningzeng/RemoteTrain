@@ -1,4 +1,4 @@
-FROM registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto-ai-power-v4.0
+FROM registry.cn-hangzhou.aliyuncs.com/baymin/darknet:latest
 WORKDIR /darknet
 COPY voc2DarknetAssets-python2.py /darknet
 COPY libdark.so /darknet
