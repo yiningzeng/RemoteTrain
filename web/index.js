@@ -675,7 +675,7 @@ class FreeFish extends React.Component {
                                                      max_batches: value,
                                                  }
                                              })}/>
-                                选择加载的权重文件(如果是梯度爆炸就劲量选择前几个保留的文件):
+                                选择加载的权重文件(如果是梯度爆炸就选择前几个保留的文件):
                                 <Select
                                     style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
                                     onChange={(v)=>{
@@ -857,9 +857,9 @@ class FreeFish extends React.Component {
 
                     <Drawer
                         title="在线测试"
-                        placement="bottom"
+                        placement="left"
                         width="100%"
-                        height="100%"
+                        height="1500px"
                         closable={true}
                         onClose={()=>{this.setState({
                             ...this.state,
@@ -872,7 +872,7 @@ class FreeFish extends React.Component {
                     >
                         <Iframe url={this.state.test.showTestDrawerUrl}
                                 width="100%"
-                                height="450px"
+                                height="850px"
                                 id="myId"
                                 frameBorder={0}
                                 className="myClassname"
@@ -1076,7 +1076,7 @@ class FreeFish extends React.Component {
                                 ...this.state.train,
                                 doTrain: {
                                     ...this.state.train.doTrain,
-                                    projectId: e.target.value
+                                    projectId: `web-${e.target.value}`
                                 }
                             }
                         })}/>
