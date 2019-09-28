@@ -834,11 +834,10 @@ def restart_train_http():
 
             # config.write(open("test.cfg", "w"))
             docker_volume = "/darknet/assets"
-            docker_volume_model = "/darknet/assets/backup/yolov3-voc_last.weights"
+            docker_volume_model = "/darknet/assets/yiningzeng.weights"
             if data['providerType'] == 'yolov3':
                 docker_volume = "/darknet/assets"
-                docker_volume_model = "/darknet/assets/backup/yolov3-voc_last.weights"
-
+                docker_volume_model = "/darknet/assets/yiningzeng.weights"
                 if "width" in data:
                     os.system('sed -i "s/^width.*/width=%s/g" %s/yolov3-voc.cfg' % (
                         data["width"], ff.package_base_path + "/" + data["assetsDir"]))
