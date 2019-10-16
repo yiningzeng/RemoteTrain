@@ -316,9 +316,15 @@ class FreeFish extends React.Component {
                     <br/>
                     <a href="http://queue.qtingvision.com:888" target="view_window">http://queue.qtingvision.com:888</a>
                 </Description>
-                <Description term="ftp服务">
-                    <a href="ftp://192.168.31.75:21/" target="view_window">ftp://192.168.31.75/</a>
+                {/*<Description term="ftp服务">*/}
+                    {/*<a href="ftp://192.168.31.75:21/" target="view_window">ftp://192.168.31.75/</a>*/}
+                {/*</Description>*/}
+                <Description term="power-ai下载">
+                    <a href="http://192.168.31.75:88/s/pjN6cyTomrTSwpQ" target="view_window">http://192.168.31.75:88/s/pjN6cyTomrTSwpQ</a>
+                    <br/>
+                    <a href="http://pan.qtingvision.com:888/s/pjN6cyTomrTSwpQ" target="view_window">http://pan.qtingvision.com:888/s/pjN6cyTomrTSwpQ</a>
                 </Description>
+
                 {/*<Description term="Remarks" span={24}>*/}
                 {/*我是数艘模式打开的年四季度拉上你的空间按时刻把数据库但是当你什么的女生看*/}
                 {/*</Description>*/}
@@ -359,7 +365,7 @@ class FreeFish extends React.Component {
                                 ...this.state.train,
                                 doTrain: {
                                     ...this.state.train.doTrain,
-                                    projectId: moment().format('x')
+                                    projectId: `web-${moment().format('x')}`
                                 }
                             }
                         });
