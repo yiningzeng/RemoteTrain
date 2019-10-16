@@ -885,7 +885,7 @@ def restart_train_http():
             # endregion
             # region detectron2
             elif data['providerType'] == 'fasterRcnn2' or data['providerType'] == 'maskRcnn2' or data['providerType'] == 'keypointRcnn2':
-                trainInfo["providerOptions"] = {"detectron2": data["image"]}
+                trainInfo["providerOptions"] = {"detectron2Image": data["image"]}
                 docker_volume = "/detectron2/datasets"
                 docker_volume_model = "/detectron2/models/R-50.pkl"
 
