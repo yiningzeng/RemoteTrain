@@ -379,12 +379,19 @@ def get_train_one():
                     if train_info['providerType'] == 'yolov3':
                         image_url = train_info['providerOptions']['yolov3Image']
                         docker_volume = "/darknet/assets"
+                    # region detectron1
                     elif train_info['providerType'] == 'fasterRcnn':
                         image_url = train_info['providerOptions']['fasterRcnnImage']
                         docker_volume = "/Detectron/detectron/datasets/data"
                     elif train_info['providerType'] == 'maskRcnn':
                         image_url = train_info['providerOptions']['maskRcnnImage']
                         docker_volume = "/Detectron/detectron/datasets/data"
+                    # endregion
+                    # region detectron2
+                    elif train_info['providerType'] == 'fasterRcnn2' or train_info['providerType'] == 'maskRcnn2' or train_info['providerType'] == 'keypointRcnn2':
+                        image_url = train_info['providerOptions']['detectron2Image']
+                        docker_volume = "/detectron2/datasets"
+                    # endregion
                     elif train_info['providerType'] == 'other':
                         image_url = train_info['providerOptions']['otherImage']
                         docker_volume = train_info['providerOptions']['docker_volume']
@@ -599,10 +606,16 @@ def do_train_http():
                      "providerType": data["providerType"],
                      "providerOptions": {"yolov3Image": data["image"]}
                      }
+        # region detectron1
         if data['providerType'] == 'fasterRcnn':
             trainInfo["providerOptions"] = {"fasterRcnnImage": data["image"]}
         elif data['providerType'] == 'maskRcnn':
             trainInfo["providerOptions"] = {"maskRcnnImage": data["image"]}
+        # endregion
+        # region detectron2
+        elif data['providerType'] == 'fasterRcnn2' or data['providerType'] == 'maskRcnn2' or data['providerType'] == 'keypointRcnn2':
+            trainInfo["providerOptions"] = {"detectron2Image": data["image"]}
+        # endregion
         elif data['providerType'] == 'other':
             trainInfo["providerOptions"] = {"otherImage": data["image"]}
 
@@ -716,6 +729,13 @@ def get_model_list(framework_type, path):
         max_batches = os.popen(
             "sed -n '/MAX_ITER/p' %s/train-config.yaml | sed 's/MAX_ITER//g' |sed 's/://g' |sed 's/ //g'" % (
                     ff.package_base_path + "/" + path)).read().replace('\n', '')
+    # region detectron2
+    elif framework_type == 'fasterRcnn2' or framework_type == 'maskRcnn2' or framework_type == 'keypointRcnn2':
+        search_path = "/assets/%s/output/*.pth"
+        max_batches = os.popen(
+            "sed -n '/MAX_ITER/p' %s/train-config.yaml | sed 's/MAX_ITER//g' |sed 's/://g' |sed 's/ //g'" % (
+                    ff.package_base_path + "/" + path)).read().replace('\n', '')
+    # endregion
     elif framework_type == 'other':
         search_path = "不支持，后续开发"
 
@@ -850,7 +870,7 @@ def restart_train_http():
                     os.system('sed -i "s/^steps.*/steps=%d,%d/g" %s/yolov3-voc.cfg' % (
                         int(int(data["max_batches"]) * 0.8), int(int(data["max_batches"]) * 0.9),
                         ff.package_base_path + "/" + data["assetsDir"]))
-
+            # region detectron
             elif data['providerType'] == 'fasterRcnn' or data['providerType'] == 'maskRcnn':
                 trainInfo["providerOptions"] = {"fasterRcnnImage": data["image"]}
                 docker_volume = "/Detectron/detectron/datasets/data"
@@ -862,6 +882,17 @@ def restart_train_http():
                     # os.system('sed -i "s/^STEPS.*/steps=%d,%d/g" %s/yolov3-voc.cfg' % (
                     #     int(int(data["max_batches"]) * 0.8), int(int(data["max_batches"]) * 0.9),
                     #     ff.package_base_path + "/" + data["assetsDir"]))
+            # endregion
+            # region detectron2
+            elif data['providerType'] == 'fasterRcnn2' or data['providerType'] == 'maskRcnn2' or data['providerType'] == 'keypointRcnn2':
+                trainInfo["providerOptions"] = {"detectron2": data["image"]}
+                docker_volume = "/detectron2/datasets"
+                docker_volume_model = "/detectron2/models/R-50.pkl"
+
+                if "max_batches" in data: # fasterRcnn 和 maskRcnn 暂时不先替换掉steps
+                    os.system('sed -i "s/  MAX_ITER.*/  MAX_ITER: %d/g" %s/train-config.yaml' % (
+                        data["max_batches"], ff.package_base_path + "/" + data["assetsDir"]))
+            # endregion
             elif data['providerType'] == 'other':
                 trainInfo["providerOptions"] = {"otherImage": data["image"]}
                 docker_volume = data['docker_volume']
@@ -910,11 +941,6 @@ def restart_train_http():
 
 
 if __name__ == '__main__':
-    # id = os.popen(
-    #     'cat /home/baymin/daily-work/ftp/train-assets-cizhuan-fasterRcnn-20190808/container_id.log | head -n 1')
-    # .read().replace('\n', '')
-    #
-    # print(id)
 
     # channel = connection.channel()
     debug = False
