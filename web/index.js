@@ -32,6 +32,7 @@ class FreeFish extends React.Component {
                 javaUrl: "ai.8101.api.qtingvision.com",
                 javaPort: 888,
                 image: "registry.cn-hangzhou.aliyuncs.com/baymin/darknet-test:latest",
+                projectId: undefined,
             },
         },
         timer: null,
@@ -458,13 +459,13 @@ class FreeFish extends React.Component {
                                                                    // port = 8100;
                                                                    fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:";
                                                                    // javaUrl = "ai.8101.api.qtingvision.com";
-                                                               } else if (record.net_framework === "fasterRcnn") {
+                                                               } else if (record.net_framework === "fasterRcnn" || record.net_framework === "maskRcnn") {
                                                                    // port = 8200;
                                                                    fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron:";
                                                                    // javaUrl = "ai.8101.api.qtingvision.com";
-                                                               } else if (record.net_framework === "maskRcnn") {
+                                                               } else if (record.net_framework === "fasterRcnn2" || record.net_framework === "maskRcnn2") {
                                                                    // port = 8300;
-                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron:";
+                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/pytorch-powerai/detectron2:";
                                                                    // javaUrl = "ai.8101.api.qtingvision.com";
                                                                } else if (record.net_framework === "other") {
                                                                    // port = 8400;
@@ -521,15 +522,21 @@ class FreeFish extends React.Component {
                                                                    port = 8100;
                                                                    fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/darknet-test:";
                                                                    javaUrl = "ai.8101.api.qtingvision.com";
-                                                               } else if (record.net_framework === "fasterRcnn") {
+                                                               } else if (record.net_framework === "fasterRcnn" || record.net_framework === "maskRcnn") {
+                                                                   Modal.warning({
+                                                                       title: '此框架已经弃用',
+                                                                       content: '已弃用，暂时不提供测试接口',
+                                                                   });
+                                                                   return;
+                                                               }  else if (record.net_framework === "fasterRcnn2") {
                                                                    port = 8200;
-                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron-test:";
-                                                                   javaUrl = "ai.8101.api.qtingvision.com";
-                                                               } else if (record.net_framework === "maskRcnn") {
-                                                                   port = 8300;
-                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron-test:";
-                                                                   javaUrl = "ai.8101.api.qtingvision.com";
-                                                               } else if (record.net_framework === "other") {
+                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/pytorch-powerai/detectron2-test:";
+                                                                   javaUrl = "ai.8201.api.qtingvision.com";
+                                                               } else if (record.net_framework === "maskRcnn2") {
+                                                                   port = 8200;
+                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/pytorch-powerai/detectron2-test:";
+                                                                   javaUrl = "ai.8201.api.qtingvision.com";
+                                                               }  else if (record.net_framework === "other") {
                                                                    port = 8400;
                                                                    fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:";
                                                                    javaUrl = "ai.8401.api.qtingvision.com";
@@ -550,7 +557,8 @@ class FreeFish extends React.Component {
                                                                                javaPort: javaPort,
                                                                                providerType: record.net_framework,
                                                                                assetsDir: record.assets_directory_name, //nowAssetsDir
-                                                                               image: `${fImage}${bImage}`
+                                                                               image: `${fImage}${bImage}`,
+                                                                               projectId: record.project_id,
                                                                            }
                                                                        }
                                                                    });
@@ -711,7 +719,8 @@ class FreeFish extends React.Component {
                             </Spin>
                         }
                         {
-                            (this.state.continueTrain.providerType === "fasterRcnn" || this.state.continueTrain.providerType === "maskRcnn") &&   <Spin spinning={this.state.continueTrain.loading} tip={"正在加载权重文件"} delay={500}>
+                            (this.state.continueTrain.providerType === "fasterRcnn" || this.state.continueTrain.providerType === "maskRcnn" ||
+                            this.state.continueTrain.providerType === "fasterRcnn2" || this.state.continueTrain.providerType === "maskRcnn2") && <Spin spinning={this.state.continueTrain.loading} tip={"正在加载权重文件"} delay={500}>
                                 训练最大轮数:
                                 <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.max_batches}
                                              onChange={(value) => this.setState({
@@ -793,7 +802,7 @@ class FreeFish extends React.Component {
                                                         weights: undefined,
                                                     },
                                                     // showTestDrawerUrl: `/test?javaUrl=${}&javaPort=${}&providerType=${this.state.test.doTest.providerType}&port=${this.state.test.port}&assets=${this.state.test.doTest.assetsDir}`,
-                                                    showTestDrawerUrl: `/test?javaUrl=${this.state.test.doTest.javaUrl}&javaPort=${this.state.test.doTest.javaPort}&providerType=${this.state.test.doTest.providerType}&port=${this.state.test.doTest.port}&assets=${this.state.test.doTest.assetsDir}`,
+                                                    showTestDrawerUrl: `/test?projectId=${this.state.test.doTest.projectId}&javaUrl=${this.state.test.doTest.javaUrl}&javaPort=${this.state.test.doTest.javaPort}&providerType=${this.state.test.doTest.providerType}&port=${this.state.test.doTest.port}&assets=${this.state.test.doTest.assetsDir}`,
                                                 }
                                             });
 
@@ -1147,10 +1156,10 @@ class FreeFish extends React.Component {
                                     let bImage = "latest";
                                     if (value === "yolov3") {
                                         fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:";
-                                    } else if (value === "fasterRcnn") {
+                                    } else if (value === "fasterRcnn" || value === "maskRcnn") {
                                         fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron:";
-                                    } else if (value === "maskRcnn") {
-                                        fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron:";
+                                    } else if (value === "fasterRcnn2" || value === "maskRcnn2" || value === "keypointRcnn2" ) {
+                                        fImage = "registry.cn-hangzhou.aliyuncs.com/pytorch-powerai/detectron2:";
                                     } else if (value === "other") {
                                         fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:";
                                     }
@@ -1168,9 +1177,12 @@ class FreeFish extends React.Component {
                                         }
                                     });
                                 }}>
-                            <Option value="yolov3">yolov3</Option>
-                            <Option value="fasterRcnn">fasterRcnn</Option>
-                            <Option value="maskRcnn">maskRcnn</Option>
+                            <Option value="fasterRcnn2">[detectron2] fasterRcnn2</Option>
+                            <Option value="maskRcnn2">[detectron2] maskRcnn2</Option>
+                            <Option value="keypointRcnn2">[detectron2] keypointRcnn2</Option>
+                            <Option value="yolov3">[darknet] yolov3</Option>
+                            <Option value="fasterRcnn">[detectron] fasterRcnn</Option>
+                            <Option value="maskRcnn">[detectron] maskRcnn</Option>
                             <Option value="other">other</Option>
                         </Select>
                         镜像地址:
