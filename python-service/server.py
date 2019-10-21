@@ -838,6 +838,26 @@ def stop_train_http():
     return Response(json.dumps({"res": "ok"}), mimetype='application/json')
 
 
+@app.route('/get_record_by_project_id', methods=['POST'])
+def get_record_by_project_id():
+    try:
+        data = request.json
+        if data is not None:
+            suc, rows = ff.postgres_execute(
+                "select net_framework as providerType, assets_directory_name as assets from train_record where project_id ='%s'" % data['projectId'],
+                True)
+            if suc:
+                if rows is not None and len(rows) > 0:
+                    return Response(json.dumps({"res": "ok", "providerType": rows[0][0], "assets": rows[0][1]}), mimetype='application/json')
+                else:
+                    return Response(json.dumps({"res": "ok", "providerType": "none", "assets": "none"}),
+                                    mimetype='application/json')
+    except Exception as e:
+        log.error(e)
+        return Response(json.dumps({"res": "err"}), mimetype='application/json')
+    return Response(json.dumps({"res": "ok"}), mimetype='application/json')
+
+
 @app.route('/restart_train', methods=['POST'])
 def restart_train_http():
     try:
