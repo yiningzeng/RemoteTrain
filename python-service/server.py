@@ -770,6 +770,10 @@ def start_test():
                 docker_name = "detectron-service-testing"
                 docker_volume = "/Detectron/detectron/datasets/data"
                 docker_volume_model = "/Detectron/detectron/datasets/data/result/train/coco_2014_train/generalized_rcnn/server.pkl"
+            elif data['providerType'] == 'fasterRcnn2' or data['providerType'] == 'maskRcnn2':
+                docker_name = "detectron2-service-testing"
+                docker_volume = "/detectron2/datasets"
+                docker_volume_model = "/detectron2/datasets/model_test.pth"
             elif data['providerType'] == 'other':
                 docker_name = "other-service-testing"
                 docker_volume = data['docker_volume']
@@ -912,6 +916,9 @@ def restart_train_http():
                 if "max_batches" in data: # fasterRcnn 和 maskRcnn 暂时不先替换掉steps
                     os.system('sed -i "s/  MAX_ITER.*/  MAX_ITER: %d/g" %s/train-config.yaml' % (
                         data["max_batches"], ff.package_base_path + "/" + data["assetsDir"]))
+                if "weights" in data: # fasterRcnn 和 maskRcnn 暂时不先替换掉steps
+                    os.system('sed -i "s/  WEIGHTS.*/  WEIGHTS: %s/g" %s/train-config.yaml' % (
+                        data["weights"], ff.package_base_path + "/" + data["assetsDir"]))
             # endregion
             elif data['providerType'] == 'other':
                 trainInfo["providerOptions"] = {"otherImage": data["image"]}
@@ -930,7 +937,7 @@ def restart_train_http():
             # 加入到训练队列
             do_basic_publish('ai.train.topic', "train.start.%s" % data['projectId'], json.dumps(trainInfo))
 
-            cmd = "echo %s | sudo -S docker run --gpus all \
+            cmd = "echo %s | sudo -S docker run --shm-size 32G --memory-swap -1 --rm --gpus '\"device=0,1,2,3,4\"' \
                         --name %s \
                         -v /etc/localtime:/etc/localtime:ro \
                         -v '%s':'%s' \
