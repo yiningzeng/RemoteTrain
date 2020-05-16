@@ -379,6 +379,9 @@ def get_train_one():
                     if train_info['providerType'] == 'yolov3':
                         image_url = train_info['providerOptions']['yolov3Image']
                         docker_volume = "/darknet/assets"
+                    elif train_info['providerType'] == 'pytorchYolov3':
+                        image_url = train_info['providerOptions']['image']
+                        docker_volume = "/root/yolov3/data/voc"
                     # region detectron1
                     elif train_info['providerType'] == 'fasterRcnn':
                         image_url = train_info['providerOptions']['fasterRcnnImage']
@@ -415,7 +418,7 @@ def get_train_one():
                     if len(container_id) > 80:
                         container_id = "more than 80"
                     # elif len(container_id) < 63:
-                    #     container_id = "less 63"
+                    #     container_id = "less 63fasterRcnn2"
                     if "train_done" not in res:
                         log.info("训练有误: %s" % res)
                         draw_url = 'http://%s:%d/env/%s' % (ff.draw_host, ff.draw_port, train_info['projectId'])
@@ -616,6 +619,8 @@ def do_train_http():
         elif data['providerType'] == 'fasterRcnn2' or data['providerType'] == 'maskRcnn2' or data['providerType'] == 'keypointRcnn2':
             trainInfo["providerOptions"] = {"detectron2Image": data["image"]}
         # endregion
+        elif data['providerType'] == 'pytorchYolov3':
+            trainInfo['providerOptions'] = {"image": data["image"]}
         elif data['providerType'] == 'other':
             trainInfo["providerOptions"] = {"otherImage": data["image"]}
 
@@ -748,8 +753,22 @@ def get_model_list(framework_type, path):
 
     return Response(json.dumps({"res": "ok", "weights_list": weights_list, "width": width, "height": height, "max_batches": max_batches}), mimetype='application/json')
 
+# region 测试服务的所有接口
+@app.route('/get_val_path_list', methods=['GET'])
+def get_val_path_list():
+    path_list = []
+    # framework_type = "yolov3"
+    search_path = "/assets/StandardValidationData/*"
+    for item in sorted(glob.glob(search_path), key=os.path.getmtime,
+                       reverse=True):  # key 根据时间排序 reverse true表示倒叙
+        filepath, tempfilename = os.path.split(item)
+        if os.path.isdir(item):
+            path_list.append({"path": item, "dir_name": tempfilename})
 
-@app.route('/start_test', methods=['POST'])
+    return Response(json.dumps({"res": "ok", "val_path_list": path_list}), mimetype='application/json')
+
+
+@app.route('/start_test', methods=['POST']) # 这里新增  weights: undefined, valPath: undefined,
 def start_test():
     try:
         data = request.json

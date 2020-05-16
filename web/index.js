@@ -8,7 +8,7 @@ import { InputNumber, Tag, Row, Modal, Spin, Col, Table, message, PageHeader, Bu
 import zhCN from 'antd/lib/locale-provider/zh_CN';
 import moment from 'moment';
 import 'moment/locale/zh-cn';
-import { getList, getModelList, doTrain, startTest, stopTrain, continueTrainTrain } from './services/api';
+import { getList, getModelList,getValPathList, doTrain, startTest, stopTrain, continueTrainTrain } from './services/api';
 const { Title, Paragraph, Text } = Typography;
 const { Option } = Select;
 const InputGroup = Input.Group;
@@ -22,12 +22,14 @@ class FreeFish extends React.Component {
             showTestDrawer: false,
             showTestDrawerUrl: "",
             showTestModal: false,
+            showStandardValidationData: false,
             loading: false,
             tips: "载入可使用的权重文件... ",
             doTest: {
                 providerType: "yolov3",
                 assetsDir: "", //nowAssetsDir
                 weights: undefined,
+                valPath: undefined,
                 port: 8100,
                 javaUrl: "ai.8101.api.qtingvision.com",
                 javaPort: 888,
@@ -191,7 +193,7 @@ class FreeFish extends React.Component {
 
     render() {
         const {
-            service: {trains: {list}, modelList}
+            service: {trains: {list}, modelList, valPathList}
         } = this.props;
         // let filters = keylist.data.map(function(item){
         //     return {text: `[${item["status"]===1?"开启":"关闭"}] ${item["key"]}`, value: item["id"]};
@@ -542,6 +544,13 @@ class FreeFish extends React.Component {
                                                                    javaUrl = "ai.8401.api.qtingvision.com";
                                                                }
 
+                                                               dispatch({
+                                                                   type: 'service/getValPathList',
+                                                                   callback: (aa) => {
+
+                                                                   }
+                                                               });
+
                                                                this.setState({
                                                                        ...this.state,
                                                                        test: {
@@ -550,6 +559,7 @@ class FreeFish extends React.Component {
                                                                            frontImage: fImage,
                                                                            baseImage: bImage,
                                                                            showTestModal: true,
+                                                                           showStandardValidationData: false,
                                                                            doTest: {
                                                                                ...this.state.test.doTest,
                                                                                port: port,
@@ -867,6 +877,39 @@ class FreeFish extends React.Component {
                                            }
                                        }
                                    })}/>
+                            标准验证集:&nbsp;&nbsp;
+                            <Switch checkedChildren="使用" unCheckedChildren="不使用"
+                                    onChange={(c) => {
+                                        this.setState({
+                                            ...this.state,
+                                            test: {
+                                                ...this.state.test,
+                                                showStandardValidationData: c,
+                                            }
+                                        })
+                                    }}/>
+                                    <br/>
+                            {
+                               this.state.test.showStandardValidationData && <div>选择加载的标准验证集目录:<Select
+                                   style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                   onChange={(v)=>{
+                                       this.setState({
+                                           ...this.state,
+                                           test: {
+                                               ...this.state.test,
+                                               doTest: {
+                                                   ...this.state.test.doTest,
+                                                   valPath: v
+                                               }
+                                           }
+                                       });
+                                   }}>
+                                   {valPathList.val_path_list.map(d => (
+                                       <Option key={d.path}>{d.dir_name}</Option>
+                                   ))}
+                               </Select>
+                               </div>
+                            }
                         </Spin>
                     </Modal>
 
@@ -1156,6 +1199,8 @@ class FreeFish extends React.Component {
                                     let bImage = "latest";
                                     if (value === "yolov3") {
                                         fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:";
+                                    } else if (value === "pytorchYolov3") {
+                                        fImage = "registry.cn-hangzhou.aliyuncs.com/pytorch-powerai/yolov3:";
                                     } else if (value === "fasterRcnn" || value === "maskRcnn") {
                                         fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron:";
                                     } else if (value === "fasterRcnn2" || value === "maskRcnn2" || value === "keypointRcnn2" ) {
@@ -1181,8 +1226,9 @@ class FreeFish extends React.Component {
                             <Option value="maskRcnn2">[detectron2] maskRcnn2</Option>
                             <Option value="keypointRcnn2">[detectron2] keypointRcnn2</Option>
                             <Option value="yolov3">[darknet] yolov3</Option>
-                            <Option value="fasterRcnn">[detectron] fasterRcnn</Option>
-                            <Option value="maskRcnn">[detectron] maskRcnn</Option>
+                            <Option value="pytorchYolov3">[pytorch] yolov3</Option>
+                            {/*<Option value="fasterRcnn">[detectron] fasterRcnn</Option>*/}
+                            {/*<Option value="maskRcnn">[detectron] maskRcnn</Option>*/}
                             <Option value="other">other</Option>
                         </Select>
                         镜像地址:
@@ -1284,6 +1330,10 @@ app.model({
             height: undefined,
             max_batches: undefined,
         },
+        valPathList: {
+            res: '',
+            val_path_list: [],
+        },
         dotrain:{},
         testRes: {
             res: '',
@@ -1305,6 +1355,14 @@ app.model({
             const response = yield call(getModelList,payload);
             yield put({
                 type: 'modelList',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
+        *getValPathList({ payload,callback}, { call, put }) {
+            const response = yield call(getValPathList,payload);
+            yield put({
+                type: 'valPathList',
                 payload: response,
             });
             if (callback)callback(response);
@@ -1359,6 +1417,12 @@ app.model({
             return {
                 ...state,
                 modelList: action.payload,
+            };
+        },
+        valPathList(state, action) {
+            return {
+                ...state,
+                valPathList: action.payload,
             };
         },
         dotrain(state, action) {

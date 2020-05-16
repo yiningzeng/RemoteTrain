@@ -17,6 +17,12 @@ export async function doTrain(params) {
     });
 }
 
+export async function getValPathList() {
+    return request(`http://${ip}/get_val_path_list`, {
+        method: 'GET',
+    });
+}
+
 export async function getModelList(params) {
     return request(`http://${ip}/get_model_list/${params.type}/${params.path}`, {
         method: 'GET',
