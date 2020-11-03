@@ -420,7 +420,7 @@ def get_train_one():
                                                                method_frame.delivery_tag,
                                                                body.decode('utf-8')))
     connection.close()
-    os.system("notify-send PowerAi状态 '项目: %s\n正在训练......' -t %d" % (notify_message, 600000))
+    os.system("notify-send PowerAi状态 '项目: %s\n状态: 正在训练......' -t %d" % (notify_message, 600000))
     return method_frame.delivery_tag, body.decode('utf-8')
 
 
