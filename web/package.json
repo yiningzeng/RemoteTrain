@@ -3,8 +3,8 @@
   "entry": {
     "index": "./index.js"
   },
-  "type": "module",
   "dependencies": {
+    "@ant-design/compatible": "^1.0.8",
     "antd": "^4.0.0",
     "dva": "^2.4.0",
     "moment": "^2.19.3",
