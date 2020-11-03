@@ -288,11 +288,11 @@ def net_is_used(port, ip='0.0.0.0'):
 # 获取单个训练队列数据
 def get_train_one():
     log.logger.info('get_train_one:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-    os.system("notify-send '%s' '%s' -t %d" % ('ceshi', '测试', 10000))
+    # os.system("notify-send '%s' '%s' -t %d" % ('ceshi', '测试', 10000))
     connection, channel, method_frame, header_frame, body = do_basic_get(queue=ff.train_queue)
     # chan.basic_ack(msg.delivery_tag)
     # It can be empty if the queue is empty so don't do anything
-
+    notify_message = ''
     if method_frame is None:
         log.logger.info("训练：Empty Basic.Get Response (Basic.GetEmpty)")
         return None, None
@@ -300,7 +300,6 @@ def get_train_one():
     else:
         # 这里需要检查训练素材包是否已经解包，如果未解包，这里需要拒绝，让它重新排队ff.channel.basic_nack
         train_info = json.loads(body.decode('utf-8'))
-
         # 判断训练状态文件是否存在
         if not os.path.exists("%s/%s/train_status.log" % (ff.assets_base_path, train_info["projectName"])):
             log.logger.info('%s 等待训练' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
@@ -309,7 +308,8 @@ def get_train_one():
             channel.basic_nack(method_frame.delivery_tag)
             connection.close()
             get_train_one()
-            log.logger.info("等待训练")
+            notify_message = "等待训练"
+            log.logger.info(notify_message)
         else:
             status = os.popen("cat '%s/%s/train_status.log' | head -n 1" %
                               (ff.assets_base_path, train_info["projectName"])).read().replace('\n', '')
@@ -397,12 +397,14 @@ def get_train_one():
                 channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
                 sql = "UPDATE train_record SET status=%d where task_id='%s'" % (2, train_info['taskId'])
                 ff.postgres_execute(sql)
+                notify_message = "正在训练......."
             elif "训练失败" in status:
                 channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
                 ff.postgres_execute(
                     "UPDATE train_record SET status=%d"
                     "where task_id='%s'" %
                     (-1, train_info['taskId']))
+                notify_message = "训练失败"
             elif "训练完成" in status:
                 channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
                 # region 更新数据库
@@ -411,12 +413,14 @@ def get_train_one():
                     "where task_id='%s'" %
                     (4, train_info['taskId']))
                 os.system("echo %s | sudo -S chmod -R 777 %s/%s" % (ff.root_password, ff.assets_base_path, train_info["projectName"]))
+                notify_message = "训练完成"
                 # endregion
         log.logger.info("训练：%s Basic.GetOk %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                                                header_frame.content_type,
                                                                method_frame.delivery_tag,
                                                                body.decode('utf-8')))
     connection.close()
+    os.system("notify-send PowerAi状态 '项目: %s\n正在训练......' -t %d" % (notify_message, 600000))
     return method_frame.delivery_tag, body.decode('utf-8')
 
 
