@@ -292,7 +292,7 @@ def get_train_one():
     connection, channel, method_frame, header_frame, body = do_basic_get(queue=ff.train_queue)
     # chan.basic_ack(msg.delivery_tag)
     # It can be empty if the queue is empty so don't do anything
-    notify_message = ''
+    notify_message = '等待训练'
     if method_frame is None:
         log.logger.info("训练：Empty Basic.Get Response (Basic.GetEmpty)")
         return None, None
@@ -420,7 +420,7 @@ def get_train_one():
                                                                method_frame.delivery_tag,
                                                                body.decode('utf-8')))
     connection.close()
-    os.system("notify-send PowerAi状态 '项目: %s\n状态: %s' -t %d" % (train_info["projectName"], notify_message, 600000))
+    os.system("notify-send PowerAi状态 '项目: %s-%s\n状态: %s' -t %d" % (train_info["projectName"], train_info['taskId'], notify_message, 600000))
     return method_frame.delivery_tag, body.decode('utf-8')
 
 
