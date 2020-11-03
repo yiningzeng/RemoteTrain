@@ -611,7 +611,8 @@ def draw_chat_http():
 @app.route('/train_list', methods=['GET'])
 def get_train_list_http():
     num = request.args.get('num', type=int, default=20)
-    page = request.args.get('page', type=int, default=0)
+    page = request.args.get('page', type=int, default=1)
+    page = page - 1
     offset = num * page
     ret_json = {"num": num, "page": page, "total": 0, "list": []}
     i, count = ff.postgres_execute("SELECT COUNT(*) FROM train_record", True)
