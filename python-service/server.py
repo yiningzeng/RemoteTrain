@@ -1038,6 +1038,7 @@ def online_model():
     fname, fename = os.path.splitext(name)
     finalFilename = "%s/%s%s%s" % (basePath, fname, release, fename)
     configFilename = "%s/%s.*" % (basePath, name.split('_')[0])
+    os.system("echo %s | sudo chmod -R 777 %s" % (ff.root_password, os.path.split(basePath)[0]))  # 重命名模型文件
     os.system("echo %s | sudo -S rm %s/*" % (ff.root_password, basePath.replace("backup", "model_release/yolov4-tiny-3l")))  # 重命名模型文件
     os.system("echo %s | sudo -S mv %s %s" % (ff.root_password, p, finalFilename))  # 重命名模型文件
     os.system("echo %s | sudo -S ln %s %s" % (ff.root_password, finalFilename, basePath.replace("backup", "model_release/yolov4-tiny-3l")))  # 硬链接模型文件
@@ -1100,10 +1101,6 @@ class Logger(object):
         self.logger.addHandler(sh)  # 把对象加到logger里
         self.logger.addHandler(th)
 
-def install():
-    a = ""
-    # res = os.popen("echo '%s' | sudo -S dpkg -l |grep %s" % (ff.root_password, "cifs-utils"))
-    # print(res.stdout.read())
 
 if __name__ == '__main__':
     log = Logger('server.log', when="D")
@@ -1118,7 +1115,6 @@ if __name__ == '__main__':
     else:
         ff = pikaqiu(root_password='baymin1024', host='192.168.31.77', username='baymin', password='baymin1024',
                      assets_base_path='/assets/Projects')
-    install()
     # init(self, sql=True, sql_host='localhost', draw=True, draw_host='localhost', draw_port=8097):
     # sql: 是否开启数据库，sql_host：数据库地址，draw：是否开启画图，draw_host：画图的服务地址，draw_port：画图的服务端口
     ff.init(sql=False, sql_host='192.168.31.77', draw_host='localhost', draw_port=1121)
