@@ -4,7 +4,8 @@
     "index": "./index.js"
   },
   "dependencies": {
-    "antd": "^3.26.20",
+    "@ant-design/compatible": "^1.0.8",
+    "antd": "^4.0.0",
     "dva": "^2.4.0",
     "moment": "^2.19.3",
     "mysql2": "^1.6.5",
