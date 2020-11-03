@@ -87,6 +87,7 @@ class FreeFish extends React.Component {
             frontImage: "registry.cn-hangzhou.aliyuncs.com/qtingvision/auto-train:",
             baseImage: "latest",
             showAiPar: false,
+            loading: false,
             doTrain: {
                 taskId: undefined, // 项目id
                 taskName: undefined, // 训练任务名称
@@ -1246,40 +1247,57 @@ class FreeFish extends React.Component {
                             }} style={{marginRight: 8}}>
                                 关闭
                             </Button>
-                            <Button type="primary" onClick={() => {
-                                if (!this.state.train.doTrain.projectName) {
-                                    notification.error({
-                                        message: "不存在项目",
-                                        description: "当前未找到相关的项目，请返回首页新建项目再进行训练任务",
-                                    });
-                                    return;
-                                }
-                                if (this.state.train.doTrain.taskName) {
-                                    console.log(`ducker do train: ${JSON.stringify(this.state.train.doTrain)}`);
-                                    const {dispatch} = this.props;
-                                    dispatch({
-                                        type: 'service/doTrain',
-                                        payload: this.state.train.doTrain,
-                                        callback: (v) => {
-                                            if (v["res"] === "ok") {
-                                                message.success("成功加入训练队列");
-                                                this.setState({
-                                                    ...this.state,
-                                                    rightVisible: false,
-                                                    leftVisible: false,
+
+                            <Button type="primary"
+                                    loading={this.state.train.loading}
+                                    onClick={() => {
+                                        if (!this.state.train.doTrain.projectName) {
+                                            notification.error({
+                                                message: "不存在项目",
+                                                description: "当前未找到相关的项目，请返回首页新建项目再进行训练任务",
+                                            });
+                                            return;
+                                        }
+                                        if (this.state.train.doTrain.taskName) {
+                                            this.setState({
+                                                ...this.state,
+                                                train: {
+                                                    ...this.state.train,
+                                                    loading: true,
+                                                }
+                                            }, () => {
+
+                                                console.log(`ducker do train: ${JSON.stringify(this.state.train.doTrain)}`);
+                                                const {dispatch} = this.props;
+                                                dispatch({
+                                                    type: 'service/doTrain',
+                                                    payload: this.state.train.doTrain,
+                                                    callback: (v) => {
+                                                        if (v["res"] === "ok") {
+                                                            message.success("成功加入训练队列");
+                                                            this.setState({
+                                                                ...this.state,
+                                                                rightVisible: false,
+                                                                leftVisible: false,
+                                                                train: {
+                                                                    ...this.state.train,
+                                                                    loading: false,
+                                                                }
+                                                            });
+                                                        } else {
+                                                            message.error("加入训练队列失败");
+                                                        }
+                                                    },
                                                 });
-                                            } else {
-                                                message.error("加入训练队列失败");
-                                            }
-                                        },
-                                    });
-                                } else {
-                                    notification.error({
-                                        message: "参数有误",
-                                        description: "有部分参数未输入！请输完后重试",
-                                    });
-                                }
-                            }}>
+                                            });
+
+                                        } else {
+                                            notification.error({
+                                                message: "参数有误",
+                                                description: "有部分参数未输入！请输完后重试",
+                                            });
+                                        }
+                                    }}>
                                 新增任务
                             </Button>
                         </div>
