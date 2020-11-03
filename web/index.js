@@ -3,19 +3,52 @@ import ReactDOM from 'react-dom';
 import Iframe from 'react-iframe';
 
 import dva, { connect } from 'dva';
-import { InputNumber, Tag, Row, Modal, Spin, Col, Table, message, PageHeader, Button, Typography, Drawer, Divider, Icon, Card , Select, Switch, Form, Input, DatePicker} from 'antd';
+import {
+    InputNumber,
+    Tag,
+    Row,
+    Modal,
+    Spin,
+    Col,
+    Table,
+    message,
+    PageHeader,
+    Button,
+    Typography,
+    Drawer,
+    Divider,
+    Icon,
+    Card,
+    Select,
+    Switch,
+    Form,
+    Input,
+    DatePicker,
+    notification,
+    Radio,
+    Badge,
+    Popconfirm
+} from 'antd';
 // 由于 antd 组件的默认文案是英文，所以需要修改为中文
 import zhCN from 'antd/lib/locale-provider/zh_CN';
 import moment from 'moment';
 import 'moment/locale/zh-cn';
-import { getList, getModelList,getValPathList, doTrain, startTest, stopTrain, continueTrainTrain } from './services/api';
+import { getList, getModelList, getValPathList, getVocPathList, doTrain,
+    startTest, stopTrain, continueTrainTrain, getLocalPathList, getModelListV2,
+    getModelByProject, get_release_models_history, del_model, online_model, offline_model } from './services/api';
 const { Title, Paragraph, Text } = Typography;
 const { Option } = Select;
 const InputGroup = Input.Group;
 moment.locale('zh-cn');
 const { confirm } = Modal;
+
+/**
+ *
+ */
 class FreeFish extends React.Component {
     state = {
+        showSettingsModal: false,
+        imageLossTimer: "zengyining",
         test: {
             frontImage: "registry.cn-hangzhou.aliyuncs.com/baymin/darknet-test:",
             baseImage: "latest",
@@ -26,8 +59,8 @@ class FreeFish extends React.Component {
             loading: false,
             tips: "载入可使用的权重文件... ",
             doTest: {
-                providerType: "yolov3",
-                assetsDir: "", //nowAssetsDir
+                providerType: "yolov4-tiny-3l",
+                assetsDir: "", // nowAssetsDir
                 weights: undefined,
                 valPath: undefined,
                 port: 8100,
@@ -47,49 +80,54 @@ class FreeFish extends React.Component {
         rightVisible: false,
         doChangeAssetsDir: true,
 
-        /*
-        *  package_info = {"projectId": data["projectId"], "projectName": data["projectName"], "packageDir": data["packageDir"], "packageName": data["packageName"]}
-        trainInfo = {"projectId": data["projectId"],
-                     "projectName": data["projectName"],
-                     "assetsDir": data["assetsDir"],
-                     "assetsType": data["assetsType"],
-                     "providerType": data["providerType"],
-                     "providerOptions": {"yolov3Image": data["image"]}
-                     }*/
         api: {
             url: localStorage.getItem("api.url") === null?"server.qtingvision.com":localStorage.getItem("api.url"),
             port: localStorage.getItem("api.port") === null?888:localStorage.getItem("api.port"),
         },
         train : {
-            frontImage: "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:",
+            frontImage: "registry.cn-hangzhou.aliyuncs.com/qtingvision/auto-train:",
             baseImage: "latest",
+            showAiPar: false,
             doTrain: {
-                projectId: undefined, // 项目id
+                taskId: undefined, // 项目id
+                taskName: undefined, // 训练任务名称
                 projectName: undefined, // 项目名称
-                packageDir: undefined, // tar压缩包里面文件夹的目录名
-                packageName: "", //tar包的名称
                 assetsDir: undefined, // 素材文件夹，和packageDir相同
-                assetsType: "pascalVoc", // 素材的类型，pascalVoc和coco和other
-                providerType: "yolov3", // 框架的类型yolov3 fasterRcnn maskRcnn
-                image: "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:latest", // 镜像路径
+                assetsType: "powerAi", // 素材的类型，pascalVoc和coco和other
+                providerType: "yolov4-tiny-3l", // 框架的类型yolov3 fasterRcnn maskRcnn
+                image: "registry.cn-hangzhou.aliyuncs.com/qtingvision/auto-train:latest", // 镜像路径
+                bacthSize: 64,
+                imageWidth: 512,
+                imageHeight: 512,
+                maxIter: 2000000, // 训练最大轮数
+                pretrainWeight: "", // 预训练权重文件
+                gpus: "0,1", // 使用的gpu id
+                trianType: 0,  // 0对应从头训练 1对应自训练 2 漏检训练
             },
         },
         continueTrain: {
             showModal: false,
             loading: false,
-            frontImage: "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:",
+            frontImage: "registry.cn-hangzhou.aliyuncs.com/qtingvision/auto-train:",
             baseImage: "latest",
             width: undefined,
             height: undefined,
             max_batches: undefined,
             projectId: undefined, // 项目id
-            assetsType: "pascalVoc", // 素材的类型，pascalVoc和coco和other
+            assetsType: "powerAi", // 素材的类型，pascalVoc和coco和other
             projectName: undefined, // 项目名称
-            providerType: "yolov3", // 框架的类型yolov3 fasterRcnn maskRcnn
-            image: "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:latest", // 镜像路径
+            providerType: "yolov4-tiny-3l", // 框架的类型yolov3 fasterRcnn maskRcnn
+            image: "registry.cn-hangzhou.aliyuncs.com/qtingvision/auto-train:latest", // 镜像路径
             assetsDir: "", //nowAssetsDir
             weights: undefined,
-        }
+        },
+        modelManager: {
+            nowEditProjectName: undefined,
+            loadingModels: true,
+            firstVisible: false,
+            secondVisible: false,
+            secondReleaseManagerVisible: false,
+        },
     };
 
     onSelectChange = (selectedRowKeys) => {
@@ -193,26 +231,17 @@ class FreeFish extends React.Component {
 
     render() {
         const {
-            service: {trains: {list}, modelList, valPathList}
+            service: {trains: {list}, modelList, modelListV2, valPathList, vocPathList, localPathList, modelByProject, get_release_models_history_res}
         } = this.props;
-        // let filters = keylist.data.map(function(item){
-        //     return {text: `[${item["status"]===1?"开启":"关闭"}] ${item["key"]}`, value: item["id"]};
-        // });
-
-        /*
-        * {"id":1,"project_id":"dfg",
-        * "container_id":"asdvgwsdvsdfqirqwjhoijwqejwqjeqweqweqws",
-        * "project_name":"测试1","status":1,"net_framework":"oodas","assets_type":"None","assets_directory_base":"None",
-        * "assets_directory_name":"None","is_jump":0,"create_time":"2019-08-07 00:46:32"}*/
         const columns = [{
-            title: '项目id',
-            dataIndex: 'project_id',
+            title: '任务标识',
+            dataIndex: 'task_id',
         }, {
-            title: '项目名称',
+            title: '训练任务名称',
+            dataIndex: 'task_name',
+        }, {
+            title: '对应项目名称',
             dataIndex: 'project_name',
-        }, {
-            title: '容器id',
-            dataIndex: 'container_id',
         }, {
             title: '网络框架',
             dataIndex: 'net_framework',
@@ -220,32 +249,18 @@ class FreeFish extends React.Component {
             title: '数据类型',
             dataIndex: 'assets_type',
         }, {
-            title: '文件夹',
-            dataIndex: 'assets_directory_name',
-        }, {
-            title: '是否插队',
-            dataIndex: 'is_jump',
-            render: v => {
-                if (v === 1) return <Tag color="#2db7f5">插队</Tag>;
-                else return <Tag>正常</Tag>;
-            }
-        }, {
             title: '创建时间',
             dataIndex: 'create_time',
         }, {
             title: '状态',
             dataIndex: 'status',
             render: v => {
-                //0:等待解包
-                // 1:解包完成
-                // 2:正在训练
-                // 3:训练完成
-                if (v === 0) return <Tag color="#A9A9A9">等待解包</Tag>;
-                else if (v === 1) return <Tag color="#f50">解包完成</Tag>;
-                else if (v === 2) return <Button type="danger" loading>正在训练</Button>;
-                else if (v === 3) return <Tag color="#800080">暂停训练</Tag>;
+                if (v === 0) return <Tag color="#FFA500">准备完成</Tag>;
+                else if (v === 1) return <Tag color="#8A2BE2">等待训练</Tag>;
+                else if (v === 2) return <Button type="primary" loading>正在训练</Button>;
+                else if (v === 3) return <Tag color="#D3D3D3">暂停训练</Tag>;
                 else if (v === 4) return <div><Tag color="#008000">训练完成</Tag><Icon type="smile" theme="twoTone"/></div>;
-                else if (v === -1) return <Tag color="#708090">训练出错</Tag>;
+                else if (v === -1) return <Tag color="#FF0000">训练出错</Tag>;
                 else return <Tag>未知</Tag>;
             }
         }];
@@ -293,60 +308,13 @@ class FreeFish extends React.Component {
             }],
             onSelection: this.onSelection,
         };
-        const Description = ({term, children, span = 12}) => (
-            <Col span={span}>
-                <div className="description">
-                    <div className="term">{term}</div>
-                    <div className="detail">{children}</div>
-                </div>
-            </Col>
-        );
 
-        const content = (
-            <Row>
-                <Description term="服务管理">
-                    <a href="http://192.168.31.75" target="view_window">http://192.168.31.75</a>
-                    <br/>
-                    <a href="http://ai.qtingvision.com:888" target="view_window">http://ai.qtingvision.com:888</a>
-                </Description>
-                <Description term="画图服务">
-                    <a href="http://192.168.31.75:8097" target="view_window">http://192.168.31.75:8097</a>
-                    <br/>
-                    <a href="http://draw.qtingvision.com:888" target="view_window">http://draw.qtingvision.com:888</a>
-                </Description>
-                <Description term="队列服务">
-                    <a href="http://192.168.31.75:15672" target="view_window">http://192.168.31.75:15672</a>
-                    <br/>
-                    <a href="http://queue.qtingvision.com:888" target="view_window">http://queue.qtingvision.com:888</a>
-                </Description>
-                {/*<Description term="ftp服务">*/}
-                    {/*<a href="ftp://192.168.31.75:21/" target="view_window">ftp://192.168.31.75/</a>*/}
-                {/*</Description>*/}
-                <Description term="power-ai下载">
-                    <a href="http://192.168.31.75:88/s/pjN6cyTomrTSwpQ" target="view_window">http://192.168.31.75:88/s/pjN6cyTomrTSwpQ</a>
-                    <br/>
-                    <a href="http://pan.qtingvision.com:888/s/pjN6cyTomrTSwpQ" target="view_window">http://pan.qtingvision.com:888/s/pjN6cyTomrTSwpQ</a>
-                </Description>
-
-                {/*<Description term="Remarks" span={24}>*/}
-                {/*我是数艘模式打开的年四季度拉上你的空间按时刻把数据库但是当你什么的女生看*/}
-                {/*</Description>*/}
-            </Row>
-        );
-
-        const extraContent = (
-            <Row>
-                <Button type="danger" size="large" onClick={this.showLeftDrawer}>
-                    使用前看我
-                </Button>
-            </Row>
-        );
         return (
             <PageHeader
                 backIcon={false}
-                title="远程训练"
+                title="训练中心"
                 subTitle="管理后台"
-                tags={<Tag color="green">正常</Tag>}
+                tags={<Tag color="green">在线</Tag>}
                 extra={[
                     <span>{`页面刷新时间:`}</span>,
                     <Text mark>{`${this.state.refreshTime}`}</Text>,
@@ -354,40 +322,78 @@ class FreeFish extends React.Component {
                     <Select defaultValue={`${this.state.refreshInterval / 1000}s`} style={{width: 120}}
                             onChange={(v) => {
                                 localStorage.setItem("refreshInterval", v);
+                                location.reload();
                             }}>
                         <Option value="5000">5s</Option>
                         <Option value="10000">10s</Option>
                         <Option value="30000">30s</Option>
                         <Option value="60000">60s</Option>
+                        <Option value="6000000">6000s</Option>
                     </Select>,
                     <Button key="1" type="primary" onClick={() => {
                         this.setState({
-                            rightVisible: true,
-                            leftVisible: true,
-                            train: {
-                                ...this.state.train,
-                                doTrain: {
-                                    ...this.state.train.doTrain,
-                                    projectId: `web-${moment().format('x')}`
+                            ...this.state,
+                            modelManager: {
+                                ...this.state.modelManager,
+                                firstVisible: true
+                            },
+                        }, () => {
+                            // 首先加载相应的数据
+                            const {dispatch} = this.props;
+                            dispatch({
+                                type: 'service/getLocalPathList',
+                                callback: (aa) => {
+
                                 }
-                            }
+                            });
                         });
                     }}>
-                        新增训练(非Power-ai)
+                        模型管理
                     </Button>,
+                    <Button.Group style={{marginLeft: 7}}>
+                        <Button key="1" type="primary" onClick={() => {
+                            // 首先加载相应的数据
+                            const {dispatch} = this.props;
+                            dispatch({
+                                type: 'service/getLocalPathList',
+                                callback: (aa) => {
+                                    this.setState({
+                                        rightVisible: true,
+                                        leftVisible: true,
+                                        train: {
+                                            ...this.state.train,
+                                            doTrain: {
+                                                ...this.state.train.doTrain,
+                                                projectName: aa.path_list.length > 0 ? aa.path_list[0].dir_name : undefined,
+                                                taskId: `${moment().format('x')}`
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+                        }}>
+                            新增训练任务
+                        </Button>
+                        <Button type="primary" onClick={() => this.setState({
+                            ...this.state,
+                            showSettingsModal: true,
+                        })}>
+                            <Icon type="setting"/>
+                        </Button>
+                    </Button.Group>,
                 ]}
                 footer={
-                    <Table size={"small"} rowSelection={rowSelection} columns={columns} dataSource={list}
+                    <Table size={"small"} columns={columns} dataSource={list}
                            onChange={this.handleTableChange}
                            expandedRowRender={record => {
                                return (
                                    <Row style={{marginLeft: 50}}>
                                        <Row>
-                                           <Switch style={{marginTop: -3}} checkedChildren="插队开" unCheckedChildren="插队关"
-                                                   disabled={record.is_jump === 1} defaultChecked={record.is_jump === 1}
-                                                   onChange={(c) => {
-                                                       message.success(`待完善， ${c}`)
-                                                   }}/>
+                                           {/*<Switch style={{marginTop: -3}} checkedChildren="插队开" unCheckedChildren="插队关"*/}
+                                           {/*        disabled={record.is_jump === 1} defaultChecked={record.is_jump === 1}*/}
+                                           {/*        onChange={(c) => {*/}
+                                           {/*            message.success(`待完善， ${c}`)*/}
+                                           {/*        }}/>*/}
                                            <Button type="primary" size="small" style={{marginLeft: 10}}
                                                    disabled={record.status !== 2} onClick={() => {
                                                confirm({
@@ -398,7 +404,7 @@ class FreeFish extends React.Component {
                                                        dispatch({
                                                            type: 'service/stopTrain',
                                                            payload: {
-                                                               projectId: record.project_id,
+                                                               taskId: record.project_id,
                                                                assetsDir: record.assets_directory_name
                                                            },
                                                            callback: (v) => {
@@ -415,7 +421,7 @@ class FreeFish extends React.Component {
                                                                            this.setState({
                                                                                ...this.state,
                                                                                refreshTime: moment().format("YYYY-MM-DD HH:mm:ss"),
-                                                                               pagination:{
+                                                                               pagination: {
                                                                                    ...this.state.pagination,
                                                                                    total: v["total"],
                                                                                    pageSize: v["num"],
@@ -429,72 +435,79 @@ class FreeFish extends React.Component {
                                                            }
                                                        });
                                                    },
-                                                   onCancel() {},
+                                                   onCancel() {
+                                                   },
                                                });
                                            }}>停止训练</Button>
-                                           <Button type="primary" size="small" style={{marginLeft: 10}}
-                                                   disabled={record.status === 2} onClick={() => {
-                                               this.setState(
-                                                   {
-                                                       ...this.state,
-                                                       continueTrain: {
-                                                           ...this.state.continueTrain,
-                                                           loading: true,
-                                                           showModal: true,
-                                                       }
-                                                   },
-                                                   () => {
-                                                       const {dispatch} = this.props;
-                                                       dispatch({
-                                                           type: 'service/getModelList',
-                                                           payload: {
-                                                               type: record.net_framework,
-                                                               path: encodeURI(record.assets_directory_name)
-                                                           },
-                                                           callback: (v) => {
-                                                               let fImage = "";
-                                                               let bImage = "latest";
-                                                               // let port = 8100;
-                                                               // let javaUrl = "";
-                                                               // let javaPort = 888;
-                                                               if (record.net_framework === "yolov3") {
-                                                                   // port = 8100;
-                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:";
-                                                                   // javaUrl = "ai.8101.api.qtingvision.com";
-                                                               } else if (record.net_framework === "fasterRcnn" || record.net_framework === "maskRcnn") {
-                                                                   // port = 8200;
-                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron:";
-                                                                   // javaUrl = "ai.8101.api.qtingvision.com";
-                                                               } else if (record.net_framework === "fasterRcnn2" || record.net_framework === "maskRcnn2") {
-                                                                   // port = 8300;
-                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/pytorch-powerai/detectron2:";
-                                                                   // javaUrl = "ai.8101.api.qtingvision.com";
-                                                               } else if (record.net_framework === "other") {
-                                                                   // port = 8400;
-                                                                   fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:";
-                                                                   // javaUrl = "ai.8401.api.qtingvision.com";
-                                                               }
+                                           {/*<Button type="primary" size="small" style={{marginLeft: 10}}*/}
+                                           {/*        disabled={record.status === 2} onClick={() => {*/}
+                                           {/*    this.setState(*/}
+                                           {/*        {*/}
+                                           {/*            ...this.state,*/}
+                                           {/*            continueTrain: {*/}
+                                           {/*                ...this.state.continueTrain,*/}
+                                           {/*                loading: true,*/}
+                                           {/*                showModal: true,*/}
+                                           {/*            }*/}
+                                           {/*        },*/}
+                                           {/*        () => {*/}
+                                           {/*            const {dispatch} = this.props;*/}
+                                           {/*            dispatch({*/}
+                                           {/*                type: 'service/getModelList',*/}
+                                           {/*                payload: {*/}
+                                           {/*                    type: record.net_framework,*/}
+                                           {/*                    path: encodeURI(record.assets_directory_name)*/}
+                                           {/*                },*/}
+                                           {/*                callback: (v) => {*/}
+                                           {/*                    dispatch({*/}
+                                           {/*                        type: 'service/getVocPathList',*/}
+                                           {/*                        callback: (aa) => {*/}
+                                           {/*                            message.info(JSON.stringify(aa));*/}
+                                           {/*                        }*/}
+                                           {/*                    });*/}
+                                           {/*                    let fImage = "";*/}
+                                           {/*                    let bImage = "latest";*/}
+                                           {/*                    // let port = 8100;*/}
+                                           {/*                    // let javaUrl = "";*/}
+                                           {/*                    // let javaPort = 888;*/}
+                                           {/*                    if (record.net_framework === "yolov3") {*/}
+                                           {/*                        // port = 8100;*/}
+                                           {/*                        fImage = "registry.cn-hangzhou.aliyuncs.com/qtingvision/auto-train:";*/}
+                                           {/*                        // javaUrl = "ai.8101.api.qtingvision.com";*/}
+                                           {/*                    } else if (record.net_framework === "fasterRcnn" || record.net_framework === "maskRcnn") {*/}
+                                           {/*                        // port = 8200;*/}
+                                           {/*                        fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron:";*/}
+                                           {/*                        // javaUrl = "ai.8101.api.qtingvision.com";*/}
+                                           {/*                    } else if (record.net_framework === "fasterRcnn2" || record.net_framework === "maskRcnn2") {*/}
+                                           {/*                        // port = 8300;*/}
+                                           {/*                        fImage = "registry.cn-hangzhou.aliyuncs.com/pytorch-powerai/detectron2:";*/}
+                                           {/*                        // javaUrl = "ai.8101.api.qtingvision.com";*/}
+                                           {/*                    } else if (record.net_framework === "other") {*/}
+                                           {/*                        // port = 8400;*/}
+                                           {/*                        fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:";*/}
+                                           {/*                        // javaUrl = "ai.8401.api.qtingvision.com";*/}
+                                           {/*                    }*/}
 
-                                                               this.setState({
-                                                                   ...this.state,
-                                                                   continueTrain: {
-                                                                       ...this.state.continueTrain,
-                                                                       loading: false,
-                                                                       frontImage: fImage,
-                                                                       baseImage: bImage,
-                                                                       showModal: true,
-                                                                       assetsType: record.assets_type, // 素材的类型，pascalVoc和coco和other
-                                                                       projectName: record.project_name, // 项目名称
-                                                                       projectId: record.project_id,
-                                                                       providerType: record.net_framework,
-                                                                       assetsDir: record.assets_directory_name, //nowAssetsDir
-                                                                       image: `${fImage}${bImage}`,
-                                                                   }
-                                                               });
-                                                           },
-                                                       });
-                                                   });
-                                           }}>继续训练</Button>
+                                           {/*                    this.setState({*/}
+                                           {/*                        ...this.state,*/}
+                                           {/*                        continueTrain: {*/}
+                                           {/*                            ...this.state.continueTrain,*/}
+                                           {/*                            loading: false,*/}
+                                           {/*                            frontImage: fImage,*/}
+                                           {/*                            baseImage: bImage,*/}
+                                           {/*                            showModal: true,*/}
+                                           {/*                            assetsType: record.assets_type, // 素材的类型，pascalVoc和coco和other*/}
+                                           {/*                            projectName: record.project_name, // 项目名称*/}
+                                           {/*                            projectId: record.project_id,*/}
+                                           {/*                            providerType: record.net_framework,*/}
+                                           {/*                            assetsDir: record.assets_directory_name, //nowAssetsDir*/}
+                                           {/*                            image: `${fImage}${bImage}`,*/}
+                                           {/*                        }*/}
+                                           {/*                    });*/}
+                                           {/*                },*/}
+                                           {/*            });*/}
+                                           {/*        });*/}
+                                           {/*}}>继续训练</Button>*/}
                                            <Button type="primary" size="small" style={{marginLeft: 10}} onClick={() => {
                                                this.setState(
                                                    {
@@ -530,7 +543,7 @@ class FreeFish extends React.Component {
                                                                        content: '已弃用，暂时不提供测试接口',
                                                                    });
                                                                    return;
-                                                               }  else if (record.net_framework === "fasterRcnn2") {
+                                                               } else if (record.net_framework === "fasterRcnn2") {
                                                                    port = 8200;
                                                                    fImage = "registry.cn-hangzhou.aliyuncs.com/pytorch-powerai/detectron2-test:";
                                                                    javaUrl = "ai.8201.api.qtingvision.com";
@@ -538,7 +551,7 @@ class FreeFish extends React.Component {
                                                                    port = 8200;
                                                                    fImage = "registry.cn-hangzhou.aliyuncs.com/pytorch-powerai/detectron2-test:";
                                                                    javaUrl = "ai.8201.api.qtingvision.com";
-                                                               }  else if (record.net_framework === "other") {
+                                                               } else if (record.net_framework === "other") {
                                                                    port = 8400;
                                                                    fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:";
                                                                    javaUrl = "ai.8401.api.qtingvision.com";
@@ -552,46 +565,49 @@ class FreeFish extends React.Component {
                                                                });
 
                                                                this.setState({
-                                                                       ...this.state,
-                                                                       test: {
-                                                                           ...this.state.test,
-                                                                           loading: false,
-                                                                           frontImage: fImage,
-                                                                           baseImage: bImage,
-                                                                           showTestModal: true,
-                                                                           showStandardValidationData: false,
-                                                                           doTest: {
-                                                                               ...this.state.test.doTest,
-                                                                               port: port,
-                                                                               javaUrl: javaUrl,
-                                                                               javaPort: javaPort,
-                                                                               providerType: record.net_framework,
-                                                                               assetsDir: record.assets_directory_name, //nowAssetsDir
-                                                                               image: `${fImage}${bImage}`,
-                                                                               projectId: record.project_id,
-                                                                           }
+                                                                   ...this.state,
+                                                                   test: {
+                                                                       ...this.state.test,
+                                                                       loading: false,
+                                                                       frontImage: fImage,
+                                                                       baseImage: bImage,
+                                                                       showTestModal: true,
+                                                                       showStandardValidationData: false,
+                                                                       doTest: {
+                                                                           ...this.state.test.doTest,
+                                                                           port: port,
+                                                                           javaUrl: javaUrl,
+                                                                           javaPort: javaPort,
+                                                                           providerType: record.net_framework,
+                                                                           assetsDir: record.assets_directory_name, //nowAssetsDir
+                                                                           image: `${fImage}${bImage}`,
+                                                                           projectId: record.project_id,
                                                                        }
-                                                                   });
+                                                                   }
+                                                               });
                                                            },
                                                        });
                                                    });
                                            }}>打开测试端口</Button>
-                                           <Button type="primary" size="small" style={{marginLeft: 10}}>日志</Button>
+                                           <Button type="primary" size="small" style={{marginLeft: 10}} onClick={() => {
+                                               this.setState({
+                                                   ...this.state,
+                                                   imageLossTimer: moment().valueOf(),
+                                               })
+                                           }}>刷新Loss</Button>
+                                           {/*<Button type="primary" size="small" style={{marginLeft: 10}}>日志</Button>*/}
                                        </Row>
                                        <Row>
                                            <Divider/>
                                        </Row>
                                        <Row>
-                                           <Iframe url={record.draw_url}
+                                           <Col span={12} offset={4}>
+                                               <img
                                                    width="100%"
-                                                   height="500px"
-                                                   id="myId"
-                                                   frameBorder={0}
-                                                   className="myClassname"
-                                                   display="initial"
-                                                   position="relative"/>
-                                           <a href={record.url} target="view_window"
-                                              style={{margin: 0}}>{record.description}</a>
+                                                   height={600}
+                                                   src={record.draw_url + "?id=" + moment().valueOf() + this.state.imageLossTimer}
+                                               />
+                                           </Col>
                                        </Row>
                                    </Row>
                                )
@@ -601,7 +617,60 @@ class FreeFish extends React.Component {
                 }
             >
                 <div className="wrap">
-
+                    <Modal
+                        title="设置"
+                        okText="保存"
+                        cancelText="取消"
+                        destroyOnClose
+                        visible={this.state.showSettingsModal}
+                        onOk={() => {
+                            localStorage.setItem("api.url", this.state.api.url);
+                            localStorage.setItem("api.port", this.state.api.port);
+                            message.success("保存成功");
+                            location.reload();
+                        }}
+                        onCancel={() => {
+                            this.setState({
+                                ...this.state,
+                                showSettingsModal: false,
+                            });
+                        }}
+                    >
+                        接口地址:
+                        <InputGroup style={{marginTop: "10px", marginBottom: "20px"}} compact>
+                            <Input style={{width: '70%'}} addonBefore="http://" value={this.state.api.url}
+                                   onChange={e => {
+                                       this.setState({
+                                           ...this.state,
+                                           api: {
+                                               ...this.state.api,
+                                               url: e.target.value,
+                                           }
+                                       });
+                                   }}
+                                   placeholder="网址不带http://" allowClear/>
+                            <Input
+                                style={{
+                                    width: 30,
+                                    borderLeft: 0,
+                                    pointerEvents: 'none',
+                                    backgroundColor: '#fff',
+                                }}
+                                placeholder=":"
+                                disabled
+                            />
+                            <Input style={{width: '15%', textAlign: 'center', borderLeft: 0}}
+                                   value={this.state.api.port} onChange={(e) => {
+                                this.setState({
+                                    ...this.state,
+                                    api: {
+                                        ...this.state.api,
+                                        port: e.target.value,
+                                    }
+                                });
+                            }} defaultValue={this.state.apiPort} placeholder="port"/>
+                        </InputGroup>
+                    </Modal>
                     <Modal
                         title="继续训练"
                         okText="开始"
@@ -646,7 +715,7 @@ class FreeFish extends React.Component {
                                                         this.setState({
                                                             ...this.state,
                                                             refreshTime: moment().format("YYYY-MM-DD HH:mm:ss"),
-                                                            pagination:{
+                                                            pagination: {
                                                                 ...this.state.pagination,
                                                                 total: v["total"],
                                                                 pageSize: v["num"],
@@ -655,7 +724,8 @@ class FreeFish extends React.Component {
                                                     },
                                                 });
                                             }
-                                        }});
+                                        }
+                                    });
                                 });
                         }}
                         onCancel={() => {
@@ -671,9 +741,11 @@ class FreeFish extends React.Component {
                         cancelButtonProps={{disabled: false}}
                     >
                         {
-                            this.state.continueTrain.providerType === "yolov3" &&   <Spin spinning={this.state.continueTrain.loading} tip={"正在加载权重文件"} delay={500}>
+                            this.state.continueTrain.providerType === "yolov3" &&
+                            <Spin spinning={this.state.continueTrain.loading} tip={"正在加载权重文件"} delay={500}>
                                 图像宽:
-                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.width}
+                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                             placeholder={modelList.width}
                                              onChange={(value) => this.setState({
                                                  ...this.state,
                                                  continueTrain: {
@@ -682,7 +754,8 @@ class FreeFish extends React.Component {
                                                  }
                                              })}/>
                                 图像高:
-                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.height}
+                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                             placeholder={modelList.height}
                                              onChange={(value) => this.setState({
                                                  ...this.state,
                                                  continueTrain: {
@@ -691,7 +764,8 @@ class FreeFish extends React.Component {
                                                  }
                                              })}/>
                                 训练最大轮数:
-                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.max_batches}
+                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                             placeholder={modelList.max_batches}
                                              onChange={(value) => this.setState({
                                                  ...this.state,
                                                  continueTrain: {
@@ -702,7 +776,7 @@ class FreeFish extends React.Component {
                                 选择加载的权重文件(如果是梯度爆炸就选择前几个保留的文件):
                                 <Select
                                     style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
-                                    onChange={(v)=>{
+                                    onChange={(v) => {
                                         this.setState({
                                             ...this.state,
                                             continueTrain: {
@@ -715,6 +789,24 @@ class FreeFish extends React.Component {
                                         <Option key={d.path}>{d.filename}</Option>
                                     ))}
                                 </Select>
+                                选择加载的数据集:<Select
+                                style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                onChange={(v) => {
+                                    this.setState({
+                                        ...this.state,
+                                        test: {
+                                            ...this.state.test,
+                                            doTest: {
+                                                ...this.state.test.doTest,
+                                                valPath: v
+                                            }
+                                        }
+                                    });
+                                }}>
+                                {vocPathList.voc_path_list.map(d => (
+                                    <Option key={d.path}>{d.dir_name}</Option>
+                                ))}
+                            </Select>
                                 镜像地址:
                                 <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="镜像地址"
                                        addonBefore={this.state.continueTrain.frontImage}
@@ -730,9 +822,11 @@ class FreeFish extends React.Component {
                         }
                         {
                             (this.state.continueTrain.providerType === "fasterRcnn" || this.state.continueTrain.providerType === "maskRcnn" ||
-                            this.state.continueTrain.providerType === "fasterRcnn2" || this.state.continueTrain.providerType === "maskRcnn2") && <Spin spinning={this.state.continueTrain.loading} tip={"正在加载权重文件"} delay={500}>
+                                this.state.continueTrain.providerType === "fasterRcnn2" || this.state.continueTrain.providerType === "maskRcnn2") &&
+                            <Spin spinning={this.state.continueTrain.loading} tip={"正在加载权重文件"} delay={500}>
                                 训练最大轮数:
-                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder={modelList.max_batches}
+                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                             placeholder={modelList.max_batches}
                                              onChange={(value) => this.setState({
                                                  ...this.state,
                                                  continueTrain: {
@@ -743,7 +837,7 @@ class FreeFish extends React.Component {
                                 选择加载的权重文件(如果是梯度爆炸就劲量选择前几个保留的文件):
                                 <Select
                                     style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
-                                    onChange={(v)=>{
+                                    onChange={(v) => {
                                         this.setState({
                                             ...this.state,
                                             continueTrain: {
@@ -820,7 +914,8 @@ class FreeFish extends React.Component {
                                             // tempwindow.location=`/test?port=8100&assets=${this.state.test.nowAssetsDir}`;
                                             // window.open(`/test?port=8100&assets=${this.state.test.nowAssetsDir}`, "_blank");
                                             // window.open(`/test?port=8100&assets=${this.state.test.nowAssetsDir}`, "_blank", "scrollbars=yes,resizable=1,modal=false,alwaysRaised=yes");
-                                        }});
+                                        }
+                                    });
                                 });
                         }}
                         onCancel={() => {
@@ -841,24 +936,26 @@ class FreeFish extends React.Component {
                     >
                         <Spin spinning={this.state.test.loading} tip={this.state.test.tips} delay={500}>
                             网络框架:
-                            <Input style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder="Basic usage" disabled value={this.state.test.doTest.providerType}/>
+                            <Input style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                   placeholder="Basic usage" disabled value={this.state.test.doTest.providerType}/>
                             服务端口:
-                            <Input style={{width: '100%', marginTop: "10px", marginBottom: "10px"}} placeholder="Basic usage" disabled value={this.state.test.doTest.port}/>
+                            <Input style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                   placeholder="Basic usage" disabled value={this.state.test.doTest.port}/>
                             选择加载的权重文件:
                             <Select
                                 style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
-                                    onChange={(v)=>{
-                                        this.setState({
-                                            ...this.state,
-                                            test: {
-                                                ...this.state.test,
-                                                doTest: {
-                                                    ...this.state.test.doTest,
-                                                    weights: v
-                                                }
+                                onChange={(v) => {
+                                    this.setState({
+                                        ...this.state,
+                                        test: {
+                                            ...this.state.test,
+                                            doTest: {
+                                                ...this.state.test.doTest,
+                                                weights: v
                                             }
-                                        });
-                                    }}>
+                                        }
+                                    });
+                                }}>
                                 {modelList.weights_list.map(d => (
                                     <Option key={d.path}>{d.filename}</Option>
                                 ))}
@@ -888,27 +985,27 @@ class FreeFish extends React.Component {
                                             }
                                         })
                                     }}/>
-                                    <br/>
+                            <br/>
                             {
-                               this.state.test.showStandardValidationData && <div>选择加载的标准验证集目录:<Select
-                                   style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
-                                   onChange={(v)=>{
-                                       this.setState({
-                                           ...this.state,
-                                           test: {
-                                               ...this.state.test,
-                                               doTest: {
-                                                   ...this.state.test.doTest,
-                                                   valPath: v
-                                               }
-                                           }
-                                       });
-                                   }}>
-                                   {valPathList.val_path_list.map(d => (
-                                       <Option key={d.path}>{d.dir_name}</Option>
-                                   ))}
-                               </Select>
-                               </div>
+                                this.state.test.showStandardValidationData && <div>选择加载的标准验证集目录:<Select
+                                    style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                    onChange={(v) => {
+                                        this.setState({
+                                            ...this.state,
+                                            test: {
+                                                ...this.state.test,
+                                                doTest: {
+                                                    ...this.state.test.doTest,
+                                                    valPath: v
+                                                }
+                                            }
+                                        });
+                                    }}>
+                                    {valPathList.val_path_list.map(d => (
+                                        <Option key={d.path}>{d.dir_name}</Option>
+                                    ))}
+                                </Select>
+                                </div>
                             }
                         </Spin>
                     </Modal>
@@ -919,13 +1016,15 @@ class FreeFish extends React.Component {
                         width="100%"
                         height="1500px"
                         closable={true}
-                        onClose={()=>{this.setState({
-                            ...this.state,
-                            test: {
-                                ...this.state.test,
-                                showTestDrawer: false,
-                            }
-                        })}}
+                        onClose={() => {
+                            this.setState({
+                                ...this.state,
+                                test: {
+                                    ...this.state.test,
+                                    showTestDrawer: false,
+                                }
+                            })
+                        }}
                         visible={this.state.test.showTestDrawer}
                     >
                         <Iframe url={this.state.test.showTestDrawerUrl}
@@ -937,146 +1036,19 @@ class FreeFish extends React.Component {
                                 display="initial"
                                 position="relative"/>
                         {/*<Iframe url={this.state.test.showTestDrawerUrl}*/}
-                                {/*width="100%"*/}
-                                {/*height="500px"*/}
-                                {/*id="myId"*/}
-                                {/*frameBorder={0}*/}
-                                {/*className="myClassname"*/}
-                                {/*display="initial"*/}
-                                {/*position="relative"/>*/}
-                    </Drawer>
-
-
-                    <Drawer
-                        title="新增训练(非Power-ai)-使用教程"
-                        placement="left"
-                        width="50%"
-                        closable={true}
-                        onClose={this.hideLeftDrawer}
-                        visible={this.state.leftVisible}
-                    >
-                        <Typography>
-                            <Title>介绍</Title>
-                            <Paragraph>
-                                远程训练系统，支持通过Power-Ai标完图直接训练，还支持手动训练其他数据和各种框架。由于软件里集成度高，几乎实现傻瓜式的配置。所以这里主要介绍怎么使用手动训练
-                            </Paragraph>
-                            <Paragraph>
-                                由于不通框架训练使用的方式也不一样，本系统主要基于docker实现训练，目前提供3种自动化集成度高的框架。<Text mark>Yolov3</Text>和<Text
-                                mark>FasterRcnn</Text>和<Text mark>MaskRcnn</Text>，
-                                当然有其他集成度较高的框架也可以通过镜像直接加载。
-                            </Paragraph>
-                            <Paragraph>
-                                <Text mark>特别说明：本系统只支持一种压缩包格式自解压<Text code>tar</Text>，上传一定要是tar格式压缩包，否则直接凉凉。</Text>
-                                <br/>
-                                <Text mark>特别说明：需要填写的目录绝对区分大小写！！！，否则也是直接凉凉。</Text>
-                            </Paragraph>
-                            <Title level={2}>Yolov3示例：</Title>
-                            <Paragraph>
-                                <ul>
-                                    <li>
-                                        <Title level={4}>1.制作标准的2012格式的Pascal Voc数据集</Title>
-                                        <Paragraph>
-                                            在目标检测中，主要用到了 Annotations，ImageSets，JPEGImages
-                                            其中 ImageSets/Main/ 保存了具体数据集的索引，Annotations 保存了标签数据， JPEGImages 保存了图片内容。
-                                            ImageSets/Main/ 文件夹以 , $class$_train.txt $class$_val.txt的格式命名。 train.txt
-                                            val.txt 例外，可以没有
-                                        </Paragraph>
-                                    </li>
-                                    <li>
-                                        <Title level={4}>2.在Pascal Voc数据集的根目录下新建配置文件
-                                            <Text mark><a target="view_window"
-                                                          href="https://github.com/yiningzeng/darknet-license/blob/master/remote_train/yolov3-voc.cfg">yolov3-voc.cfg</a></Text>
-                                            和<Text mark><a target="view_window"
-                                                           href="https://github.com/yiningzeng/darknet-license/blob/master/remote_train/use_gpus">use_gpus</a></Text></Title>
-                                        <Paragraph>
-                                            如果使用服务器来训练的话，两个配置文件都不需要改动<br/>
-                                            配置文件:<br/>
-                                            <Text mark>yolov3-voc.cfg</Text>只需要更改<Text code>batch=68</Text>和<Text
-                                            code>subdivisions=32</Text>，一般情况不用更改
-                                            <br/>
-                                            <Text mark>use_gpus</Text>只是需要使用的显卡的id号通过英文<Text code>,</Text>来拼接
-                                        </Paragraph>
-                                    </li>
-                                    <li>
-                                        <Title level={4}>3.打包文件夹并上传</Title>
-                                        <Paragraph>
-                                            <Text strong>ftp账号:</Text><Text code>ftpicubic</Text><br/>
-                                            <Text strong>ftp密码:</Text><Text code>ftpicubic-123</Text><br/>
-                                            比如你的Pascal Voc数据集的目录是<Text code>我是voc目录</Text>，那么你压缩打包的文件名是<Text
-                                            code>我是voc目录.tar</Text><Text strong>你一定要记住，下一步中需要用到</Text>
-                                            通过上文提供的ftp地址上传文件到根目录，推荐使用<Text code>FileZilla</Text>客户端上传
-                                        </Paragraph>
-                                    </li>
-                                    <li>
-                                        <Title level={4}>4.恭喜你已经完成了所有的配置，只用把信息提交就行了</Title>
-                                        <Paragraph>
-                                            <Text strong>点页面右上角按钮</Text>
-                                            填写项目名和上一步的信息，其他如果没更新那直接默认。主要是镜像地址，使用前咨询开发
-                                        </Paragraph>
-                                    </li>
-                                    <li>
-                                        <Title level={4}>5.等着训练</Title>
-                                    </li>
-                                </ul>
-                            </Paragraph>
-
-                            <Title level={2}>Detectron示例：</Title>
-                            <Paragraph>
-                                <ul>
-                                    <li>
-                                        <Title level={4}>1.制作CoCo数据集</Title>
-                                        <Paragraph>
-                                            新建目录<Text mark>演示项目</Text>，在目录中放置数据集目录<Text mark>coco</Text>，区分大小写，注意这里是小写。
-                                            在目标检测中，主要用到了 coco/coco_val2014，coco/coco_train2014，coco/annotations
-                                            其中 coco/annotations 保存了标签数据， coco/coco_val2014，coco/coco_train2014 保存了图片内容。
-                                            在coco/annotations 文件夹中 ,
-                                            instances_train2014.json为训练的数据集，instances_minival2014.json为测试的数据集。
-                                        </Paragraph>
-                                    </li>
-                                    <li>
-                                        <Title level={4}>2.在CoCo数据集的根目录下新建配置文件</Title>
-                                        <Paragraph>
-                                            <Text mark>project_id.log</Text> 里面存写项目名，和画图主窗口有关<br/>
-                                            新建文件<Text mark>train_log/convert_data.log</Text> 如果文件夹不存在直接创建<br/>
-                                            <Text mark><a target="view_window"
-                                                          href="https://github.com/yiningzeng/RemoteTrain/blob/master/config-template/train-config.yaml">
-                                                train-config.yaml</a></Text><br/>
-                                            配置
-                                            <Text mark>train-config.yaml</Text>说明:<br/>
-                                            需要更改<Text code>NUM_CLASSES: 实际目标的数目+1</Text>和<Text code>NUM_GPUS:
-                                            训练需要使用的GPU数量</Text>，注意:后有空格
-                                            <br/>
-                                        </Paragraph>
-                                    </li>
-                                    <li>
-                                        <Title level={4}>3.打包文件夹并上传</Title>
-                                        <Paragraph>
-                                            <Text strong>ftp账号:</Text><Text code>ftpicubic</Text><br/>
-                                            <Text strong>ftp密码:</Text><Text code>ftpicubic-123</Text><br/>
-                                            比如你的项目目录是<Text code>演示项目</Text>，那么你压缩打包的文件名是<Text code>演示项目.tar</Text><Text
-                                            strong>你一定要记住，下一步中需要用到</Text>
-                                            通过上文提供的ftp地址上传文件到根目录，推荐使用<Text code>FileZilla</Text>客户端上传
-                                        </Paragraph>
-                                    </li>
-                                    <li>
-                                        <Title level={4}>4.恭喜你已经完成了所有的配置，只用把信息提交就行了</Title>
-                                        <Paragraph>
-                                            <Text strong>点页面右上角按钮</Text>
-                                            填写项目名和上一步的信息，其他如果没更新那直接默认。主要是镜像地址，使用前咨询开发
-                                        </Paragraph>
-                                    </li>
-                                    <li>
-                                        <Title level={4}>5.等着训练</Title>
-                                    </li>
-                                </ul>
-                            </Paragraph>
-                        </Typography>
+                        {/*width="100%"*/}
+                        {/*height="500px"*/}
+                        {/*id="myId"*/}
+                        {/*frameBorder={0}*/}
+                        {/*className="myClassname"*/}
+                        {/*display="initial"*/}
+                        {/*position="relative"/>*/}
                     </Drawer>
 
                     <Drawer
-                        title="新增训练(非Power-ai)"
+                        title="新增训练任务"
                         placement="right"
-                        width="50%"
+                        width="40%"
                         closable={false}
                         maskClosable={false}
                         onClose={() => {
@@ -1087,97 +1059,39 @@ class FreeFish extends React.Component {
                         }}
                         visible={this.state.rightVisible}
                     >
-                        接口地址:
-                        <InputGroup style={{marginTop: "10px", marginBottom: "20px"}} compact>
-                            <Input style={{width: '50%'}} addonBefore="http://" value={this.state.api.url}
-                                   onChange={e => {
-                                       this.setState({
-                                           ...this.state,
-                                           api: {
-                                               ...this.state.api,
-                                               url: e.target.value,
-                                           }
-                                       });
-                                   }}
-                                   placeholder="网址不带http://" allowClear/>
-                            <Input
-                                style={{
-                                    width: 30,
-                                    borderLeft: 0,
-                                    pointerEvents: 'none',
-                                    backgroundColor: '#fff',
-                                }}
-                                placeholder=":"
-                                disabled
-                            />
-                            <Input style={{width: '10%', textAlign: 'center', borderLeft: 0}}
-                                   value={this.state.api.port} onChange={(e) => {
-                                this.setState({
-                                    ...this.state,
-                                    api: {
-                                        ...this.state.api,
-                                        port: e.target.value,
+                        训练任务名称:
+                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="训练任务名称"
+                               allowClear onChange={(e) => this.setState({
+                            train: {
+                                ...this.state.train,
+                                doTrain: {
+                                    ...this.state.train.doTrain,
+                                    taskName: e.target.value
+                                }
+                            }
+                        })}/>
+                        所属项目:
+                        <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}}
+                                defaultValue={localPathList === undefined ? "" : localPathList.path_list.length > 0 ? localPathList.path_list[0].dir_name : ""}
+                                onChange={(value) => this.setState({
+                                    train: {
+                                        ...this.state.train,
+                                        doTrain: {
+                                            ...this.state.train.doTrain,
+                                            projectName: value
+                                        }
                                     }
-                                });
-                            }} defaultValue={this.state.apiPort} placeholder="port"/>
-                            <Button type="primary" onClick={() => {
-                                localStorage.setItem("api.url", this.state.api.url);
-                                localStorage.setItem("api.port", this.state.api.port);
-                                message.success("保存成功");
-                            }}>保存接口</Button>
-                        </InputGroup>
-                        项目ID:
-                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="项目ID"
-                               value={this.state.train.doTrain.projectId}
-                               allowClear onChange={(e) => this.setState({
-                            train: {
-                                ...this.state.train,
-                                doTrain: {
-                                    ...this.state.train.doTrain,
-                                    projectId: `web-${e.target.value}`
-                                }
+                                })}>
+                            {
+                                // 这里循环
+                                localPathList.path_list.map(d => (
+                                    <Option key={d.dir_name}>{d.dir_name}</Option>
+                                ))
                             }
-                        })}/>
-                        项目名:
-                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="项目名"
-                               allowClear onChange={(e) => this.setState({
-                            train: {
-                                ...this.state.train,
-                                doTrain: {
-                                    ...this.state.train.doTrain,
-                                    projectName: e.target.value
-                                }
-                            }
-                        })}/>
-                        tar压缩包名:
-                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="tar压缩包名" addonAfter=".tar"
-                               allowClear onChange={(e) => this.setState({
-                            train: {
-                                ...this.state.train,
-                                doTrain: {
-                                    ...this.state.train.doTrain,
-                                    packageName: `${e.target.value}.tar`,
-                                    packageDir: this.state.doChangeAssetsDir ? e.target.value : this.state.train.doTrain.packageDir,
-                                    assetsDir: this.state.doChangeAssetsDir ? e.target.value : this.state.train.doTrain.assetsDir,
-                                }
-                            }
-                        })}/>
-                        解压后的目录名:
-                        <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="解压后的目录名"
-                               value={this.state.train.doTrain.assetsDir}
-                               allowClear onChange={(e) => this.setState({
-                            doChangeAssetsDir: false,
-                            train: {
-                                ...this.state.train,
-                                doTrain: {
-                                    ...this.state.train.doTrain,
-                                    packageDir: e.target.value, assetsDir: e.target.value
-                                }
-                            }
-                        })}/>
+                        </Select>
                         数据格式:
                         <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}}
-                                defaultValue="pascalVOC"
+                                defaultValue="powerAi"
                                 onChange={(value) => this.setState({
                                     train: {
                                         ...this.state.train,
@@ -1187,26 +1101,20 @@ class FreeFish extends React.Component {
                                         }
                                     }
                                 })}>
+                            <Option value="powerAi">powerAi</Option>
                             <Option value="pascalVOC">pascalVOC</Option>
                             <Option value="coco">coco</Option>
                             <Option value="other">other</Option>
                         </Select>
                         使用的框架:
-                        <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}} defaultValue="yolov3"
+                        <Select style={{marginTop: "10px", marginBottom: "20px", width: "100%"}}
+                                defaultValue="[darknet] yolov4-tiny-3l"
                                 onChange={(value) => {
                                     console.log("providerType" + value);
                                     let fImage = "";
                                     let bImage = "latest";
-                                    if (value === "yolov3") {
-                                        fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/darknet:";
-                                    } else if (value === "pytorchYolov3") {
-                                        fImage = "registry.cn-hangzhou.aliyuncs.com/pytorch-powerai/yolov3:";
-                                    } else if (value === "fasterRcnn" || value === "maskRcnn") {
-                                        fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/detectron:";
-                                    } else if (value === "fasterRcnn2" || value === "maskRcnn2" || value === "keypointRcnn2" ) {
-                                        fImage = "registry.cn-hangzhou.aliyuncs.com/pytorch-powerai/detectron2:";
-                                    } else if (value === "other") {
-                                        fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:";
+                                    if (value === "yolov4-tiny-3l.cfg") {
+                                        fImage = "registry.cn-hangzhou.aliyuncs.com/qtingvision/auto-train:";
                                     }
                                     this.setState({
                                         ...this.state,
@@ -1222,18 +1130,11 @@ class FreeFish extends React.Component {
                                         }
                                     });
                                 }}>
-                            <Option value="fasterRcnn2">[detectron2] fasterRcnn2</Option>
-                            <Option value="maskRcnn2">[detectron2] maskRcnn2</Option>
-                            <Option value="keypointRcnn2">[detectron2] keypointRcnn2</Option>
-                            <Option value="yolov3">[darknet] yolov3</Option>
-                            <Option value="pytorchYolov3">[pytorch] yolov3</Option>
-                            {/*<Option value="fasterRcnn">[detectron] fasterRcnn</Option>*/}
-                            {/*<Option value="maskRcnn">[detectron] maskRcnn</Option>*/}
-                            <Option value="other">other</Option>
+                            <Option value="yolov4-tiny-3l.cfg">[darknet] yolov4-tiny-3l</Option>
                         </Select>
                         镜像地址:
                         <InputGroup compact>
-                            <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="tar压缩包名"
+                            <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="镜像版本"
                                    addonBefore={this.state.train.frontImage}
                                    defaultValue={this.state.train.baseImage} allowClear
                                    onChange={(e) => {
@@ -1250,7 +1151,138 @@ class FreeFish extends React.Component {
                                        })
                                    }}/>
                         </InputGroup>
-
+                        AI参数(选填)-专业人员操作:&nbsp;&nbsp;
+                        <Switch checkedChildren="已打开调参" unCheckedChildren="已关闭调参"
+                                onChange={(c) => {
+                                    const {dispatch} = this.props;
+                                    dispatch({
+                                        type: 'service/getModelListV2',
+                                        payload: {
+                                            framework_type: this.state.train.doTrain.providerType,
+                                            project_name: encodeURI(this.state.train.doTrain.projectName)
+                                        },
+                                    });
+                                    this.setState({
+                                        ...this.state,
+                                        train: {
+                                            ...this.state.train,
+                                            showAiPar: c,
+                                        }
+                                    })
+                                }}/>
+                        {
+                            this.state.train.showAiPar && <div>
+                                每次训练所选取的样本数:
+                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                             placeholder={this.state.train.doTrain.bacthSize}
+                                             onChange={(value) => {
+                                                 this.setState({
+                                                     ...this.state,
+                                                     train: {
+                                                         ...this.state.train,
+                                                         doTrain: {
+                                                             ...this.state.train.doTrain,
+                                                             bacthSize: value,
+                                                         },
+                                                     }
+                                                 }, () => {
+                                                     console.log(`ducker do train: callback ${this.state.train.doTrain.bacthSize}`);
+                                                 })
+                                             }}/>
+                                图像宽:
+                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                             placeholder={this.state.train.doTrain.imageWidth}
+                                             onChange={(value) => this.setState({
+                                                 ...this.state,
+                                                 train: {
+                                                     ...this.state.train,
+                                                     doTrain: {
+                                                         ...this.state.train.doTrain,
+                                                         imageWidth: value,
+                                                     },
+                                                 }
+                                             })}/>
+                                图像高:
+                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                             placeholder={this.state.train.doTrain.imageHeight}
+                                             onChange={(value) => this.setState({
+                                                 ...this.state,
+                                                 train: {
+                                                     ...this.state.train,
+                                                     doTrain: {
+                                                         ...this.state.train.doTrain,
+                                                         imageHeight: value,
+                                                     },
+                                                 }
+                                             })}/>
+                                训练最大轮数:
+                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                             placeholder={this.state.train.doTrain.maxIter}
+                                             onChange={(value) => this.setState({
+                                                 ...this.state,
+                                                 train: {
+                                                     ...this.state.train,
+                                                     doTrain: {
+                                                         ...this.state.train.doTrain,
+                                                         maxIter: value,
+                                                     },
+                                                 }
+                                             })}/>
+                                使用的GPU:
+                                <Input style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                       placeholder={this.state.train.doTrain.gpus}
+                                       onChange={(e) => this.setState({
+                                           ...this.state,
+                                           train: {
+                                               ...this.state.train,
+                                               doTrain: {
+                                                   ...this.state.train.doTrain,
+                                                   gpus: e.target.value,
+                                               },
+                                           }
+                                       })}/>
+                                训练类型:&nbsp;&nbsp;
+                                <Radio.Group defaultValue={this.state.train.doTrain.trianType}
+                                             onChange={(e) => this.setState({
+                                                 ...this.state,
+                                                 train: {
+                                                     ...this.state.train,
+                                                     doTrain: {
+                                                         ...this.state.train.doTrain,
+                                                         trianType: e.target.value,
+                                                     },
+                                                 }
+                                             })}>
+                                    <Radio value={0}>从头训练</Radio>
+                                    <Radio value={1}>对应自训练</Radio>
+                                    <Radio value={2}>漏检训练</Radio>
+                                </Radio.Group>
+                                <br/>
+                                选择加载的预训练权重文件:
+                                <Select
+                                    style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                                    placeholder={"不选择的话默认使用初始的预训练文件"}
+                                    onChange={(value) => {
+                                        this.setState({
+                                            ...this.state,
+                                            train: {
+                                                ...this.state.train,
+                                                doTrain: {
+                                                    ...this.state.train.doTrain,
+                                                    pretrainweight: value,
+                                                },
+                                            }
+                                        });
+                                    }}>
+                                    {modelListV2.model_list.map(d => (
+                                        <Option key={d.filename}>{d.filename}</Option>
+                                    ))}
+                                </Select>
+                                <br/>
+                                <br/>
+                                <br/>
+                            </div>
+                        }
                         <div
                             style={{
                                 position: 'absolute',
@@ -1269,35 +1301,313 @@ class FreeFish extends React.Component {
                                     leftVisible: false,
                                 });
                             }} style={{marginRight: 8}}>
-                                取消
+                                关闭
                             </Button>
-                            <Button onClick={() => {
-                                const {dispatch} = this.props;
-                                dispatch({
-                                    type: 'service/doTrain',
-                                    payload: this.state.train.doTrain,
-                                    callback: (v) => {
-                                        if (v["res"] === "ok") {
-                                            message.success("成功加入训练队列");
-                                            this.setState({
-                                                ...this.state,
-                                                rightVisible: false,
-                                                leftVisible: false,
-                                            });
-                                        }
-                                        else {
-                                            message.error("加入训练队列失败");
-                                        }
-                                    },
-                                });
+                            <Button type="primary" onClick={() => {
+                                if (!this.state.train.doTrain.projectName) {
+                                    notification.error({
+                                        message: "不存在项目",
+                                        description: "当前未找到相关的项目，请返回首页新建项目再进行训练任务",
+                                    });
+                                    return;
+                                }
+                                if (this.state.train.doTrain.taskName) {
+                                    console.log(`ducker do train: ${JSON.stringify(this.state.train.doTrain)}`);
+                                    const {dispatch} = this.props;
+                                    dispatch({
+                                        type: 'service/doTrain',
+                                        payload: this.state.train.doTrain,
+                                        callback: (v) => {
+                                            if (v["res"] === "ok") {
+                                                message.success("成功加入训练队列");
+                                                this.setState({
+                                                    ...this.state,
+                                                    rightVisible: false,
+                                                    leftVisible: false,
+                                                });
+                                            } else {
+                                                message.error("加入训练队列失败");
+                                            }
+                                        },
+                                    });
+                                } else {
+                                    notification.error({
+                                        message: "参数有误",
+                                        description: "有部分参数未输入！请输完后重试",
+                                    });
+                                }
                             }}>
-                                提交
+                                新增任务
                             </Button>
                         </div>
                     </Drawer>
 
-                    <div className="content padding">{content}</div>
-                    <div className="content padding">{extraContent}</div>
+                    <Drawer
+                        title="项目列表"
+                        width="50%"
+                        maskClosable={true}
+                        onClose={() => {
+                            this.setState({
+                                ...this.state,
+                                modelManager: {
+                                    ...this.state.modelManager,
+                                    firstVisible: false
+                                },
+                            });
+                        }}
+                        visible={this.state.modelManager.firstVisible}
+                    >
+                        <Table columns={[
+                            {
+                                title: '项目名',
+                                key: "project_name",
+                                dataIndex: 'dir_name',
+                                render: text => <Badge status="processing" text={text}/>,
+                            },
+                            {
+                                title: '操作',
+                                dataIndex: 'dir_name',
+                                render: text => (
+                                    <span>
+                                    <a onClick={() => {
+                                        this.setState({
+                                            ...this.state,
+                                            modelManager: {
+                                                ...this.state.modelManager,
+                                                secondVisible: true,
+                                                nowEditProjectName: text,
+                                            },
+                                        }, () => {
+                                            const {dispatch} = this.props;
+                                            dispatch({
+                                                type: 'service/getModelByProject',
+                                                payload: {
+                                                    project_name: encodeURI(text)
+                                                },
+                                                callback: (aa) => {
+                                                    this.setState({
+                                                        ...this.state,
+                                                        modelManager: {
+                                                            ...this.state.modelManager,
+                                                            loadingModels: false,
+                                                        },
+                                                    });
+                                                }
+                                            });
+                                        });
+                                    }}>查看模型</a>
+                                        <Divider type="vertical"/>
+                                           <a onClick={() => {
+                                               this.setState({
+                                                   ...this.state,
+                                                   modelManager: {
+                                                       ...this.state.modelManager,
+                                                       secondReleaseManagerVisible: true,
+                                                       loadingModels: true,
+                                                       nowEditProjectName: text,
+                                                   },
+                                               }, () => {
+                                                   const {dispatch} = this.props;
+                                                   dispatch({
+                                                       type: 'service/getReleaseModelsHistory',
+                                                       payload: {
+                                                           project_name: encodeURI(text)
+                                                       },
+                                                       callback: (aa) => {
+                                                           this.setState({
+                                                               ...this.state,
+                                                               modelManager: {
+                                                                   ...this.state.modelManager,
+                                                                   loadingModels: false,
+                                                               },
+                                                           });
+                                                       }
+                                                   });
+                                               });
+                                           }}>发布管理</a>
+                                    </span>
+                                ),
+                            }]} dataSource={localPathList.path_list}/>
+                        <Drawer
+                            title={`${this.state.modelManager.nowEditProjectName}-模型列表`}
+                            width="50%"
+                            maskClosable={true}
+                            onClose={() => {
+                                this.setState({
+                                    ...this.state,
+                                    modelManager: {
+                                        ...this.state.modelManager,
+                                        secondVisible: false
+                                    },
+                                });
+                            }}
+                            visible={this.state.modelManager.secondVisible}
+                        >
+                            <Spin tip="正在加载项目..." spinning={this.state.modelManager.loadingModels}>
+                                {/*<Badge status="processing" text="Running" />*/}
+                                <Table columns={[
+                                    {
+                                        title: '模型名称',
+                                        key: "name",
+                                        dataIndex: 'name',
+                                    }, {
+                                        title: '发布状态',
+                                        key: "status",
+                                        dataIndex: 'status',
+                                        render: v => {
+                                            if (v === 1) return <Badge status="warning" text="已发布"/>;
+                                            else if (v === 2) return <Badge status="processing" text="已发布(线上更新版本)"/>;
+                                        },
+                                    }, {
+                                        title: '操作',
+                                        render: (text, record) => (
+                                            <span>
+                                                {
+                                                    record.status === 0 &&  <Popconfirm
+                                                        title="发布会把最新的模型替换为当前发布的模型，如需更换可到发布管理里面选择？"
+                                                        onConfirm={() => {
+                                                            const {dispatch} = this.props;
+                                                            dispatch({
+                                                                type: 'service/onlineModel',
+                                                                payload: {
+                                                                    p: encodeURI(record.path)
+                                                                },
+                                                                callback: (aa) => {
+                                                                    const {dispatch} = this.props;
+                                                                    dispatch({
+                                                                        type: 'service/getModelByProject',
+                                                                        payload: {
+                                                                            project_name: this.state.modelManager.nowEditProjectName
+                                                                        },
+                                                                    });
+                                                                }
+                                                            });
+                                                            notification.success({
+                                                                message: "提醒",
+                                                                description: "已经发布成功，线上的AOI软件可以通过更新直接获取当前模型",
+                                                            });
+                                                        }}
+                                                        okText="确定"
+                                                        cancelText="取消"
+                                                    >
+                                                        <a>发布</a>
+                                                    </Popconfirm>
+                                                }
+                                                {
+                                                    record.status === 0 && <Divider type="vertical"/>
+                                                }
+                                                {
+                                                    record.status !== 2 && <Popconfirm
+                                                        title="确定要删除么？"
+                                                        onConfirm={() => {
+                                                            const {dispatch} = this.props;
+                                                            dispatch({
+                                                                type: 'service/delModel',
+                                                                payload: {
+                                                                    p: encodeURI(record.path)
+                                                                },
+                                                                callback: (aa) => {
+                                                                    const {dispatch} = this.props;
+                                                                    dispatch({
+                                                                        type: 'service/getModelByProject',
+                                                                        payload: {
+                                                                            project_name: this.state.modelManager.nowEditProjectName
+                                                                        },
+                                                                    });
+                                                                    notification.success({
+                                                                        message: "恭喜",
+                                                                        description: "删除成功",
+                                                                    });
+                                                                }
+                                                            });
+
+
+                                                        }}
+                                                        okText="确定"
+                                                        cancelText="取消"
+                                                    >
+                                                        <a>删除</a>
+                                                    </Popconfirm>
+                                                }
+
+
+                                            </span>),
+                                    }]} dataSource={modelByProject.models}/>
+                            </Spin>
+                        </Drawer>
+
+                        <Drawer
+                            title={`${this.state.modelManager.nowEditProjectName}-发布历史`}
+                            width="50%"
+                            maskClosable={true}
+                            onClose={() => {
+                                this.setState({
+                                    ...this.state,
+                                    modelManager: {
+                                        ...this.state.modelManager,
+                                        secondReleaseManagerVisible: false
+                                    },
+                                });
+                            }}
+                            visible={this.state.modelManager.secondReleaseManagerVisible}
+                        >
+                            <Spin tip="正在加载项目..." spinning={this.state.modelManager.loadingModels}>
+                                {/*<Badge status="processing" text="Running" />*/}
+                                <Table columns={[
+                                    {
+                                        title: '模型名称',
+                                        key: "name",
+                                        dataIndex: 'name',
+                                    }, {
+                                        title: '上线状态',
+                                        key: "status",
+                                        dataIndex: 'status',
+                                        render: v => {
+                                            if (v === 1) return <Badge status="processing" text="线上更新版本"/>;
+                                        },
+                                    }, {
+                                        title: '操作',
+                                        render: (text, record) => (
+                                            <span>
+                                                {
+                                                    record.status === 0 &&  <Popconfirm
+                                                        title="上线会把最新的模型替换为当前的模型？"
+                                                        onConfirm={() => {
+                                                            const {dispatch} = this.props;
+                                                            dispatch({
+                                                                type: 'service/onlineModel',
+                                                                payload: {
+                                                                    p: encodeURI(record.path),
+                                                                    is_history: 1,
+                                                                },
+                                                                callback: (aa) => {
+                                                                    const {dispatch} = this.props;
+                                                                    dispatch({
+                                                                        type: 'service/getReleaseModelsHistory',
+                                                                        payload: {
+                                                                            project_name: this.state.modelManager.nowEditProjectName
+                                                                        }
+                                                                    });
+                                                                }
+                                                            });
+                                                            notification.success({
+                                                                message: "提醒",
+                                                                description: "已经上线成功，线上的AOI软件可以通过更新直接获取当前模型",
+                                                            });
+                                                        }}
+                                                        okText="确定"
+                                                        cancelText="取消"
+                                                    >
+                                                        <a>上线</a>
+                                                    </Popconfirm>
+                                                }
+                                            </span>),
+                                    }]} dataSource={get_release_models_history_res.models}/>
+                            </Spin>
+                        </Drawer>
+                    </Drawer>
+                    {/*<div className="content padding">{content}</div>*/}
+                    {/*<div className="content padding">{extraContent}</div>*/}
                 </div>
             </PageHeader>
 
@@ -1330,9 +1640,26 @@ app.model({
             height: undefined,
             max_batches: undefined,
         },
+        modelListV2: {
+            res: '',
+            model_list: [],
+        },
         valPathList: {
             res: '',
             val_path_list: [],
+        },
+        vocPathList: {
+            res: '',
+            voc_path_list: [],
+        },
+        localPathList: {
+            res: '',
+            path_list: [],
+        },
+        modelByProject: {
+            res: '',
+            message: "",
+            models: [],
         },
         dotrain:{},
         testRes: {
@@ -1340,7 +1667,24 @@ app.model({
         },
         allres: {
             res: '',
-        }
+        },
+        get_release_models_history_res: {
+            res: '',
+            message: "",
+            models: [],
+        },
+        del_model_res: {
+            res: '',
+            message: "",
+        },
+        online_model_res: {
+            res: '',
+            message: "",
+        },
+        offline_model_res: {
+            res: '',
+            message: "",
+        },
     },
     effects: {
         *getList({ payload,callback}, { call, put }) {
@@ -1355,6 +1699,14 @@ app.model({
             const response = yield call(getModelList,payload);
             yield put({
                 type: 'modelList',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
+        *getVocPathList({ payload,callback}, { call, put }) {
+            const response = yield call(getVocPathList,payload);
+            yield put({
+                type: 'vocPathList',
                 payload: response,
             });
             if (callback)callback(response);
@@ -1398,7 +1750,66 @@ app.model({
                 payload: response,
             });
             if (callback)callback(response);
-        }
+        },
+        // region 新增接口 自训练
+        *getLocalPathList({ payload,callback}, { call, put }) {
+            const response = yield call(getLocalPathList,payload);
+            yield put({
+                type: 'localPathList',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
+        *getModelByProject({ payload,callback}, { call, put }) {
+            const response = yield call(getModelByProject,payload);
+            yield put({
+                type: 'modelByProject',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
+        *getModelListV2({ payload,callback}, { call, put }) {
+            const response = yield call(getModelListV2,payload);
+            yield put({
+                type: 'modelListV2',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
+        *getReleaseModelsHistory({ payload,callback}, { call, put }) {
+            const response = yield call(get_release_models_history,payload);
+            yield put({
+                type: 'get_release_models_history_res',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
+        *delModel({ payload,callback}, { call, put }) {
+            const response = yield call(del_model,payload);
+            yield put({
+                type: 'del_model_res',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
+        *onlineModel({ payload,callback}, { call, put }) {
+            const response = yield call(online_model,payload);
+            yield put({
+                type: 'online_model_res',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
+        *offlineModel({ payload,callback}, { call, put }) {
+            const response = yield call(offline_model,payload);
+            yield put({
+                type: 'offline_model_res',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
+
+        // endregion
     },
     reducers: {
         res(state, action) {
@@ -1425,6 +1836,12 @@ app.model({
                 valPathList: action.payload,
             };
         },
+        vocPathList(state, action) {
+            return {
+                ...state,
+                vocPathList: action.payload,
+            };
+        },
         dotrain(state, action) {
             return {
                 ...state,
@@ -1443,6 +1860,50 @@ app.model({
                 allres: action.payload,
             };
         },
+        // region 新增接口 自训练
+        localPathList(state, action) {
+            return {
+                ...state,
+                localPathList: action.payload,
+            };
+        },
+        modelByProject(state, action) {
+            return {
+                ...state,
+                modelByProject: action.payload,
+            };
+        },
+        modelListV2(state, action) {
+            return {
+                ...state,
+                modelListV2: action.payload,
+            };
+        },
+        get_release_models_history_res(state, action) {
+            return {
+                ...state,
+                get_release_models_history_res: action.payload,
+            };
+        },
+        del_model_res(state, action) {
+            return {
+                ...state,
+                del_model_res: action.payload,
+            };
+        },
+        online_model_res(state, action) {
+            return {
+                ...state,
+                online_model_res: action.payload,
+            };
+        },
+        offline_model_res(state, action) {
+            return {
+                ...state,
+                offline_model_res: action.payload,
+            };
+        },
+        // endregion
     },
 });
 // 3. View

@@ -23,6 +23,12 @@ export async function getValPathList() {
     });
 }
 
+export async function getVocPathList() {
+    return request(`http://${ip}/get_voc_path_list`, {
+        method: 'GET',
+    });
+}
+
 export async function getModelList(params) {
     return request(`http://${ip}/get_model_list/${params.type}/${params.path}`, {
         method: 'GET',
@@ -49,4 +55,50 @@ export async function continueTrainTrain(params) {
         body: params
     });
 }
+
+// region 新增接口
+export async function getLocalPathList() {
+    return request(`http://${ip}/get_local_projects`, {
+        method: 'GET',
+    });
+}
+export async function getModelByProject(params) {
+    return request(`http://${ip}/get_models/${params.project_name}`, {
+        method: 'GET',
+    });
+}
+export async function get_release_models_history(params) {
+    return request(`http://${ip}/get_release_models_history/${params.project_name}`, {
+        method: 'GET',
+    });
+}
+export async function getModelListV2(params) {
+    return request(`http://${ip}/get_model_list_v2/${params.framework_type}/${params.project_name}`, {
+        method: 'GET',
+    });
+}
+
+export async function del_model(params) {
+    console.log("getList"+JSON.stringify(params));
+    return request(`http://${ip}/del_model?${stringify(params)}`, {
+        method: 'DELETE',
+    });
+}
+
+export async function online_model(params) {
+    console.log("getList"+JSON.stringify(params));
+    return request(`http://${ip}/online_model?${stringify(params)}`, {
+        method: 'PUT',
+    });
+}
+
+export async function offline_model(params) {
+    console.log("getList"+JSON.stringify(params));
+    return request(`http://${ip}/offline_model?${stringify(params)}`, {
+        method: 'PUT',
+    });
+}
+//http://localhost:18888/get_model_list_v2/yolov4-tiny-3l/后道
+
+// endregion
 

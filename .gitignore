@@ -22,3 +22,5 @@ docker-shell/darknet-dockerfile/darknet53\.conv\.74
 docker-shell/darknet-dockerfile/chart\.png
 
 python-service/wxpy\.pkl
+
+.idea/

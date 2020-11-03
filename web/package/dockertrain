@@ -1,0 +1,138 @@
+#!/bin/bash
+password="icubic-123"
+port=8098
+peoject_name=""
+volume=
+docker_volume=
+docker_type=2
+log="/var/log/train"
+registry="registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-auto-v3.6"
+net_framework="detectron"
+
+log() {
+	echo $2 >> "$log/$1.log" 2>&1
+}
+
+print_help() {
+cat <<EOF
+执行后会在 -v 目录下生成 容器的id container_id.txt
+usage:  dockertrain  -p  映射到本地的端口 默认8097 如果被占用会自动分配，只检测端口占用情况，可能存在多个未开启的容器相同端口的情况
+                     -n  项目名 默认 ""
+                     -v  需要映射的素材目录(必填)
+                     -d  如果-f选择other那么-d必填，就是-v映射的容器内的目录
+                     -r  docker镜像的地址 默认registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:ai-power-wo-auto-v3.6
+                     -f  训练使用的网络默认detectron,可选yolov3和fasterRcnn和maskRcnn和other
+                     -w  root密码 默认icubic-123
+                     -g  复制脚本到/usr/local/bin/，后面执行可以全局dockertrainD
+                     -o  日志的输出目录默认/var/log/train
+                     -t  docker的gup版本，默认是最新版本2，设置1：nvidia-docker，2：docker run --gpus all
+                     -h  帮助
+EOF
+exit 1
+}
+
+while getopts "p:n:v:r:w:t:o:f:d:gh" opt; do
+  case $opt in
+    p)
+      port=$OPTARG
+      ;;
+    n)
+      project_name=$OPTARG
+      ;;
+    o)
+      log=$OPTARG
+      ;;
+    v)
+      volume=$OPTARG
+      ;;
+    d)
+      docker_volume=$OPTARG
+      ;;
+    f)
+      net_framework=$OPTARG
+      ;;
+    r)
+      registry=$OPTARG
+      ;;
+    w)
+      password=$OPTARG
+      ;;
+    t)
+      docker_type=$OPTARG
+      ;;
+    g)
+      echo $password | sudo -S cp -rf dockertrain /usr/local/bin/
+      exit 1
+      ;;
+    h)
+      print_help
+      ;;
+    \?)
+      print_help
+      ;;
+  esac
+done
+
+echo $password | sudo -S mkdir -p $log
+echo $password | sudo -S chmod -R 777 $volume
+echo $password | sudo -S chmod -R 777 $log
+
+log $project_name "首先判断端口是否占用情况"
+
+while :
+do
+        if netstat -tlpn | grep $port
+        then
+                log $project_name "端口占用"
+                port=`expr $port + 1`
+        else
+                log $project_name "$port端口可用"
+                break
+        fi
+done
+
+if [ -z $volume ];then
+  echo "映射目录不可为空"
+  exit 1
+fi  
+
+if [ "$net_framework" == 'other' ];then
+  if [ -z $docker_volume ];then
+    echo "选其他框架，-d必填"
+    exit 1
+  fi
+elif [ "$net_framework" == 'fasterRcnn' ]; then
+  docker_volume="/Detectron/detectron/datasets/data"
+elif [ "$net_framework" == 'maskRcnn' ]; then
+  docker_volume="/Detectron/detectron/datasets/data"
+elif [ "$net_framework" == 'fasterRcnn2' ]; then
+  docker_volume="/detectron2/datasets"
+elif [ "$net_framework" == 'maskRcnn2' ]; then
+  docker_volume="/detectron2/datasets"
+elif [ "$net_framework" == 'keypointRcnn2' ]; then
+  docker_volume="/detectron2/datasets"
+elif [ "$net_framework" == 'yolov3' ]; then
+  docker_volume="/darknet/assets"
+fi
+
+log $project_name "******************************"
+log $project_name "* 最终数据："
+log $project_name "* 端口：$port"
+log $project_name "* 项目名：$project_name"
+log $project_name "* 映射的目录：$volume"
+log $project_name "* 映射的容器内目录：$docker_volume"
+log $project_name "* 使用的网络框架：$net_framework"
+log $project_name "* 日志目录：$log"
+log $project_name "* 镜像：$registry"
+log $project_name "* docker gpu版本命令：$docker_type"
+log $project_name "******************************"
+
+
+if [ $docker_type -eq 2 ];then
+	echo $password | sudo -S docker run --shm-size 32G --memory-swap -1 --rm --gpus all -d -p $port:8097 -v /etc/localtime:/etc/localtime:ro -v "$volume":"$docker_volume" --name "$project_name-$port" $registry > "$volume/container_id.log" 2>&1
+	log $project_name "* 开始训练，命令: echo $password | sudo -S docker run --shm-size 32G --memory-swap -1 --rm --gpus all -d -p $port:8097 -v $volume:$docker_volume --name $project_name-$port $registry"
+else
+	echo $password | sudo -S nvidia-docker run --shm-size 32G --memory-swap -1 -rm -d -p $port:8097 -v /etc/localtime:/etc/localtime:ro -v "$volume":"$docker_volume" --name "$project_name-$port" $registry > "$volume/container_id.log" 2>&1
+fi
+echo "$project_name-$port" > "$volume/train.dname"
+echo "train_done"
