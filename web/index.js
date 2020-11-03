@@ -310,8 +310,7 @@ class FreeFish extends React.Component {
         };
 
         return (
-            <PageHeader
-                backIcon={false}
+            <PageHeader backIcon={false}
                 title="训练中心"
                 subTitle="管理后台"
                 tags={<Tag color="green">在线</Tag>}
