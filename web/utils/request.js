@@ -92,9 +92,11 @@ export default function request(url, options) {
       return response.json();
     })
     .catch(e => {
+      console.log(e);
       notification.error({
-        message: `请求错误 ${status}: ${e.url}`,
-        description: "戳错啦",
+        message: `请求错误`,
+        description: `请求网址: ${url}`,
       });
+      return "error";
     });
 }

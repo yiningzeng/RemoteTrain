@@ -113,7 +113,7 @@ class pikaqiu(object):
                 " FROM train_record WHERE status=2", True)
             if rows is not None and len(rows) > 0:
                 assets_directory_name = rows[0][2]
-                # os.system("echo 训练失败-梯度爆炸了 > '%s/%s/train_status.log'" % (self.package_base_path, assets_directory_name))  # 会自动退出，所以这里不需要了
+                # os.system("echo 训练失败-梯度爆炸了 > '%s/%s/train_%s/train_status.log'" % (self.package_base_path, assets_directory_name))  # 会自动退出，所以这里不需要了
                 # os.system("echo '%s' | sudo -S docker stop `cat '%s/%s/train.dname'`" % (self.root_password, self.package_base_path, assets_directory_name))  # 会自动退出，所以这里不需要了
                 self.postgres_execute("UPDATE train_record SET "
                                       "status=%d, project_name='%s'"
@@ -301,18 +301,18 @@ def get_train_one():
         # 这里需要检查训练素材包是否已经解包，如果未解包，这里需要拒绝，让它重新排队ff.channel.basic_nack
         train_info = json.loads(body.decode('utf-8'))
         # 判断训练状态文件是否存在
-        if not os.path.exists("%s/%s/train_status.log" % (ff.assets_base_path, train_info["projectName"])):
+        if not os.path.exists("%s/%s/train_%s/train_status.log" % (ff.assets_base_path, train_info["projectName"], train_info["taskId"])):
             log.logger.info('%s 等待训练' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-            os.system("echo '等待训练\c' > '%s/%s/train_status.log'" %
-                      (ff.assets_base_path, train_info["projectName"]))
+            os.system("echo '等待训练\c' > '%s/%s/train_%s/train_status.log'" %
+                      (ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
             channel.basic_nack(method_frame.delivery_tag)
             connection.close()
             get_train_one()
             notify_message = "等待训练"
             log.logger.info(notify_message)
         else:
-            status = os.popen("cat '%s/%s/train_status.log' | head -n 1" %
-                              (ff.assets_base_path, train_info["projectName"])).read().replace('\n', '')
+            status = os.popen("cat '%s/%s/train_%s/train_status.log' | head -n 1" %
+                              (ff.assets_base_path, train_info["projectName"], train_info["taskId"])).read().replace('\n', '')
             if "等待训练" in status:
                 channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
 
@@ -365,16 +365,14 @@ def get_train_one():
                           (container_id, -1, train_info['taskId'])
                     log.logger.info("训练:" + sql)
                     ff.postgres_execute(sql)
-                    os.system("echo '训练失败\c' > '%s/%s/train_status.log'" %
-                              (ff.assets_base_path,
-                               train_info["projectName"]))
+                    os.system("echo '训练失败\c' > '%s/%s/train_%s/train_status.log'" %
+                              (ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
                     channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
                     return
                 # 如果res长度==64，那么就是container_id
 
-                os.system("echo '正在训练\c' > '%s/%s/train_status.log'" %
-                          (ff.assets_base_path,
-                           train_info["projectName"]))
+                os.system("echo '正在训练\c' > '%s/%s/train_%s/train_status.log'" %
+                          (ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
 
                 # region 更新数据库
                 sql = "UPDATE train_record SET container_id='%s', status=%d where task_id='%s'" % \
@@ -909,8 +907,8 @@ def restart_train_http():
             ff.root_password, ff.assets_base_path + "/" + data["assetsDir"]))
 
             # 写入正在训练，否则队列会重新执行
-            os.system("echo '正在训练\c' > '%s/%s/train_status.log'" %
-                      (ff.assets_base_path, data["assetsDir"]))
+            os.system("echo '正在训练\c' > '%s/%s/train_%s/train_status.log'" %
+                      (ff.assets_base_path, data["assetsDir"], data["taskId"]))
 
             # 加入到训练队列
             do_basic_publish('ai.train.topic', "train.start.%s" % data['projectId'], json.dumps(trainInfo))

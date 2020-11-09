@@ -136,8 +136,12 @@ class FreeFish extends React.Component {
     };
 
     componentDidMount() {
-        const {dispatch} = this.props;
+
+    }
+
+    componentWillMount() {
         message.success(`正在加载`);
+        const {dispatch} = this.props;
         dispatch({
             type: 'service/getList',
             payload: {
@@ -145,7 +149,7 @@ class FreeFish extends React.Component {
                 num: 50,
             },
             callback: (v) => {
-                console.log(`加载：${JSON.stringify(v)}`);
+                // console.log(`加载：${JSON.stringify(v)}`);
                 //<Pagination
                 //       total={85}
                 //       showTotal={total => `Total ${total} items`}
