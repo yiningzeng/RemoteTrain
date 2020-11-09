@@ -303,10 +303,12 @@ def get_train_one():
         # 判断训练状态文件是否存在
         if not os.path.exists("%s/%s/train_%s/train_status.log" % (ff.assets_base_path, train_info["projectName"], train_info["taskId"])):
             log.logger.info('%s 等待训练' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-            os.system("echo '等待训练\c' > '%s/%s/train_%s/train_status.log'" %
-                      (ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
+            os.system("echo '%s' | sudo -S mkdir -p %s/%s/train_%s" % (ff.root_password, ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
+            os.system("echo '%s' | sudo -S chmod -R 777 %s/%s/" % (ff.root_password, ff.assets_base_path, train_info["projectName"]))
+            os.system("echo '等待训练\c' > '%s/%s/train_%s/train_status.log'" %(ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
             channel.basic_nack(method_frame.delivery_tag)
-            connection.close()
+            if connection.is_open:
+                connection.close()
             get_train_one()
             notify_message = "等待训练"
             log.logger.info(notify_message)
@@ -417,7 +419,8 @@ def get_train_one():
                                                                header_frame.content_type,
                                                                method_frame.delivery_tag,
                                                                body.decode('utf-8')))
-    connection.close()
+    if connection.is_open:
+        connection.close()
     os.system("notify-send PowerAi状态 '项目: %s-%s\n状态: %s' -t %d" % (train_info["projectName"], train_info['taskId'], notify_message, 600000))
     return method_frame.delivery_tag, body.decode('utf-8')
 
@@ -542,7 +545,7 @@ def do_train_http():
                 '{}/{}/config.yaml'.format(ff.assets_base_path, data["projectName"]),
                 data["bacthSize"], data["maxIter"], data["imageWidth"], data["imageHeight"], data["taskId"],
                 data["trianType"], data["pretrainWeight"], pretraincfgname, modeldcfgname, data["gpus"]))
-        os.system("echo 等待训练 > %s" % '{}/{}/train_status.log'.format(ff.assets_base_path, data["projectName"]))
+        # os.system("echo 等待训练 > %s" % '{}/{}/train_status.log'.format(ff.assets_base_path, data["projectName"]))
         # endregion
         # region 插入训练队列
         do_basic_publish('ai.train.topic', "train.start.%s" % data['projectName'], json.dumps(data))
@@ -802,12 +805,12 @@ def stop_train_http():
         data = request.json
         if data is not None:
             cmd = "echo '%s' | sudo -S docker stop `cat '%s/%s/train.dname'`" % (
-                ff.root_password, ff.assets_base_path, data['assetsDir'])
+                ff.root_password, ff.assets_base_path, data['project_name'])
             log.logger.info('停止训练:%s' % cmd)
             os.system(cmd)  # 会自动退出，所以这里不需要了
             ff.postgres_execute("UPDATE train_record SET "
-                                "status=%d WHERE project_id='%s'" %
-                                (3, data['projectId']))
+                                "status=%d WHERE task_id='%s'" %
+                                (3, data['task_id']))
     except Exception as e:
         log.logger.error(e)
         return Response(json.dumps({"res": "err"}), mimetype='application/json')
@@ -1115,7 +1118,7 @@ if __name__ == '__main__':
         ff = pikaqiu(root_password='baymin1024', host='192.168.31.77', username='baymin', password='baymin1024',
                      assets_base_path='/assets/Projects')
     else:
-        ff = pikaqiu(root_password='baymin1024', host='192.168.31.77', username='baymin', password='baymin1024',
+        ff = pikaqiu(root_password='icubic-123', host='192.168.31.77', username='baymin', password='baymin1024',
                      assets_base_path='/assets/Projects')
     # init(self, sql=True, sql_host='localhost', draw=True, draw_host='localhost', draw_port=8097):
     # sql: 是否开启数据库，sql_host：数据库地址，draw：是否开启画图，draw_host：画图的服务地址，draw_port：画图的服务端口

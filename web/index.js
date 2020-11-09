@@ -262,7 +262,7 @@ class FreeFish extends React.Component {
                 if (v === 0) return <Tag color="#FFA500">准备完成</Tag>;
                 else if (v === 1) return <Tag color="#8A2BE2">等待训练</Tag>;
                 else if (v === 2) return <Button type="primary" loading>正在训练</Button>;
-                else if (v === 3) return <Tag color="#D3D3D3">暂停训练</Tag>;
+                else if (v === 3) return <Tag color="#D3D3D3">停止训练</Tag>;
                 else if (v === 4) return <div><Tag color="#008000">训练完成</Tag><SmileTwoTone /></div>;
                 else if (v === -1) return <Tag color="#FF0000">训练出错</Tag>;
                 else return <Tag>未知</Tag>;
@@ -326,8 +326,8 @@ class FreeFish extends React.Component {
                                     dispatch({
                                         type: 'service/stopTrain',
                                         payload: {
-                                            taskId: record.project_id,
-                                            assetsDir: record.assets_directory_name
+                                            task_id: record.task_id,
+                                            project_name: record.project_name
                                         },
                                         callback: (v) => {
                                             if (v.res === "ok") {
