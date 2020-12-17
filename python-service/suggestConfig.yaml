@@ -1,0 +1,32 @@
+jinmian-huashang:
+  suggestPro: null
+  unique: '202012082124'
+jinmian-pianshang:
+  suggestPro: null
+  unique: null
+jinmian-wuran:
+  suggestPro: 0.820952
+  unique: '20081209'
+jinmian-yiwu:
+  suggestPro: 0.821969
+  unique: '20081209'
+jinmian-zhanxi:
+  suggestPro: null
+  unique: null
+maxDetPerdm: 0.0001
+pixel2realLength: 4.3
+pixelareafpthresh:
+- 1.52e-05
+- 1.52e-07
+yiwu-pianzhuang:
+  suggestPro: null
+  unique: null
+yiwu-xianwei:
+  suggestPro: 0.827152
+  unique: '20081209'
+yiwu-xianwei1:
+  suggestPro: 0.995113
+  unique: uniquexianwei
+yuanjian-xizhu:
+  suggestPro: 0.898041
+  unique: '20081209'

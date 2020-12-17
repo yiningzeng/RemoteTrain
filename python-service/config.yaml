@@ -1,0 +1,42 @@
+acc_suggest_pro: []
+anchortype: 2
+angle: 360
+batchsize: 64
+cell_stride: 1
+cellsize: 16
+expand_size:
+- 1
+- 1
+f1_suggest_pro:
+- 0
+gpus: '2'
+ignore_size:
+- 0
+- 0
+imagesize:
+- 512
+- 512
+labelsfilename: ''
+lablelist: []
+maxiter: 100
+modeldcfgname: yolov4-tiny-3l.cfg
+modelname: '20081209'
+path_prefix: data/images/
+pixelareafpthresh:
+- 1.52e-05
+- 1.52e-07
+pretraincfgname: ''
+pretrainweight: ''
+random: 1
+recall_suggest_pro: []
+resizearrange:
+- 0.3
+- 1.2
+rmgeneratedata: 1
+scale: 1
+singletrain: []
+split_ratio: 0.95
+subdivisionssize: 8
+sum_suggest_pro: []
+traintype: 0
+trainwithnolabelpic: 100000

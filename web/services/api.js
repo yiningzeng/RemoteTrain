@@ -63,7 +63,17 @@ export async function getLocalPathList() {
     });
 }
 export async function getModelByProject(params) {
-    return request(`http://${ip}/get_models/${params.project_name}`, {
+    return request(`http://${ip}/get_models/${params.project_name}/${params.label_name}`, {
+        method: 'GET',
+    });
+}
+export async function getLabelsByProject(params) {
+    return request(`http://${ip}/get_labels/${params.project_name}`, {
+        method: 'GET',
+    });
+}
+export async function getLabelsWithScoreByProject(params) {
+    return request(`http://${ip}/get_labels_with_score/${params.project_name}`, {
         method: 'GET',
     });
 }
@@ -86,9 +96,20 @@ export async function del_model(params) {
 }
 
 export async function online_model(params) {
-    console.log("getList"+JSON.stringify(params));
     return request(`http://${ip}/online_model?${stringify(params)}`, {
         method: 'PUT',
+    });
+}
+
+export async function suggest_score_put(params) {
+    return request(`http://${ip}/suggest_score?${stringify(params)}`, {
+        method: 'PUT',
+    });
+}
+
+export async function suggest_score_get(params) {
+    return request(`http://${ip}/suggest_score?${stringify(params)}`, {
+        method: 'GET',
     });
 }
 

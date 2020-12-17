@@ -2,9 +2,11 @@
 # !/usr/bin/env python
 import os
 import glob
+
 import pika
 import json
 import time
+import yaml
 import socket
 import psycopg2
 import subprocess
@@ -23,7 +25,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 # 网络框架枚举
 class net_framework:
-    yolov4Tiny3l = {"name": "yolov4-tiny-3l", "modeldcfgname": "yolov4-tiny-3l.cfg", "train_docker_volume": "/Afinaltrain/SourDatas", "modelSavePath": "backup", "modelSuffix": ".weights", "configSuffix": ".cfg"}
+    yolov4Tiny3l = {"name": "yolov4-tiny-3l", "modeldcfgname": "yolov4-tiny-3l.cfg",
+                    "train_docker_volume": "/Afinaltrain/SourDatas", "modelSavePath": "backup",
+                    "modelSuffix": ".weights", "configSuffix": ".cfg"}
 
 
 def get_net_framework(net_name):
@@ -113,12 +117,12 @@ class pikaqiu(object):
                 " FROM train_record WHERE status=2", True)
             if rows is not None and len(rows) > 0:
                 assets_directory_name = rows[0][2]
-                # os.system("echo 训练失败-梯度爆炸了 > '%s/%s/train_%s/train_status.log'" % (self.package_base_path, assets_directory_name))  # 会自动退出，所以这里不需要了
-                # os.system("echo '%s' | sudo -S docker stop `cat '%s/%s/train.dname'`" % (self.root_password, self.package_base_path, assets_directory_name))  # 会自动退出，所以这里不需要了
-                self.postgres_execute("UPDATE train_record SET "
-                                      "status=%d, project_name='%s'"
-                                      " WHERE project_id='%s'" %
-                                      (-1, str(rows[0][3]) + "-梯度爆炸了", rows[0][0]))
+                # # os.system("echo 训练失败-梯度爆炸了 > '%s/%s/train_%s/train_status.log'" % (self.package_base_path, assets_directory_name))  # 会自动退出，所以这里不需要了
+                # # os.system("echo '%s' | sudo -S docker stop `cat '%s/%s/train.dname'`" % (self.root_password, self.package_base_path, assets_directory_name))  # 会自动退出，所以这里不需要了
+                # self.postgres_execute("UPDATE train_record SET "
+                #                       "status=%d, project_name='%s'"
+                #                       " WHERE project_id='%s'" %
+                #                       (-1, str(rows[0][3]) + "-梯度爆炸了", rows[0][0]))
         else:
             for record in data:
                 if self.draw_windows is None:
@@ -202,7 +206,7 @@ class pikaqiu(object):
         self.draw_host = draw_host
         self.draw_port = draw_port
         self.sql_host = sql_host
-        if draw:
+        if draw and not debug:
             os.system(
                 "echo %s | sudo -S docker stop service-web-loss && sudo docker rm service-web-loss" % self.root_password)
             os.system("echo %s | sudo -S docker run \
@@ -300,20 +304,23 @@ def get_train_one():
     else:
         # 这里需要检查训练素材包是否已经解包，如果未解包，这里需要拒绝，让它重新排队ff.channel.basic_nack
         train_info = json.loads(body.decode('utf-8'))
+        os.system("echo '%s' | sudo -S chmod -R 777 %s/%s/train_%s" % (
+            ff.root_password, ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
         # 判断训练状态文件是否存在
-        if not os.path.exists("%s/%s/train_%s/train_status.log" % (ff.assets_base_path, train_info["projectName"], train_info["taskId"])):
+        if not os.path.exists("%s/%s/train_status_%s.log" % (
+                ff.assets_base_path, train_info["projectName"], train_info["taskId"])):
             log.logger.info('%s 等待训练' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-            os.system("echo '%s' | sudo -S mkdir -p %s/%s/train_%s" % (ff.root_password, ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
-            os.system("echo '%s' | sudo -S chmod -R 777 %s/%s/" % (ff.root_password, ff.assets_base_path, train_info["projectName"]))
-            os.system("echo '等待训练\c' > '%s/%s/train_%s/train_status.log'" %(ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
+            os.system("echo '%s' | sudo -S mkdir -p %s/%s/train_%s" % (
+                ff.root_password, ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
+            os.system("echo '%s' | sudo -S chmod -R 777 %s/%s/" % (
+                ff.root_password, ff.assets_base_path, train_info["projectName"]))
+            os.system("echo '等待训练\c' > '%s/%s/train_status_%s.log'" % (
+                ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
             channel.basic_nack(method_frame.delivery_tag)
-            if connection.is_open:
-                connection.close()
-            get_train_one()
             notify_message = "等待训练"
             log.logger.info(notify_message)
         else:
-            status = os.popen("cat '%s/%s/train_%s/train_status.log' | head -n 1" %
+            status = os.popen("cat '%s/%s/train_status_%s.log' | head -n 1" %
                               (ff.assets_base_path, train_info["projectName"], train_info["taskId"])).read().replace('\n', '')
             if "等待训练" in status:
                 channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
@@ -361,19 +368,19 @@ def get_train_one():
                 # elif len(container_id) < 63:
                 #     container_id = "less 63fasterRcnn2"
                 if "train_done" not in res:
-                    log.logger.info("训练有误: %s" % res)
+                    log.logger.error("训练有误: %s" % res)
                     # draw_url = 'http://%s:%d/env/%s' % (ff.draw_host, ff.draw_port, train_info['taskId'])
                     sql = "UPDATE train_record SET container_id='%s', status=%d where task_id='%s'" % \
                           (container_id, -1, train_info['taskId'])
-                    log.logger.info("训练:" + sql)
+                    log.logger.error("训练:" + sql)
                     ff.postgres_execute(sql)
-                    os.system("echo '训练失败\c' > '%s/%s/train_%s/train_status.log'" %
+                    os.system("echo '训练失败\c' > '%s/%s/train_status_%s.log'" %
                               (ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
                     channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
                     return
                 # 如果res长度==64，那么就是container_id
 
-                os.system("echo '正在训练\c' > '%s/%s/train_%s/train_status.log'" %
+                os.system("echo '正在训练\c' > '%s/%s/train_status_%s.log'" %
                           (ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
 
                 # region 更新数据库
@@ -397,31 +404,51 @@ def get_train_one():
                 channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
                 sql = "UPDATE train_record SET status=%d where task_id='%s'" % (2, train_info['taskId'])
                 ff.postgres_execute(sql)
+                # # 这里再查询下容器运行状态是否正常
+                str = "echo %s | sudo -S docker ps |grep %s" % (ff.root_password, train_info["taskId"])
                 notify_message = "正在训练......."
+                res = os.popen(str).read()
+                if '' == res:
+                    # 这里说明容器已经停止了，先判断下是不是训练完了
+                    cmd = "cat '%s/%s/train_status_%s.log' | head -n 1" % (ff.assets_base_path, train_info["projectName"],train_info["taskId"])
+                    print(cmd)
+                    if "训练完成" not in os.popen(cmd).read().replace('\n', ''):
+                        os.system("echo '训练失败\c' > '%s/%s/train_status_%s.log'" %
+                                  (ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
+                        if connection.is_open:
+                            connection.close()
+                        get_train_one()
             elif "训练失败" in status:
+                sql = "UPDATE train_record SET status=%d where task_id='%s'" % (-1, train_info['taskId'])
+                log.logger.error("训练出错")
+                log.logger.error("训练出错:" + sql)
                 channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
-                ff.postgres_execute(
-                    "UPDATE train_record SET status=%d"
-                    "where task_id='%s'" %
-                    (-1, train_info['taskId']))
+                ff.postgres_execute(sql)
                 notify_message = "训练失败"
             elif "训练完成" in status:
+                sql = "UPDATE train_record SET status=%d where task_id='%s'" % (4, train_info['taskId'])
+                log.logger.info("训练完成")
                 channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
                 # region 更新数据库
-                ff.postgres_execute(
-                    "UPDATE train_record SET status=%d"
-                    "where task_id='%s'" %
-                    (4, train_info['taskId']))
-                os.system("echo %s | sudo -S chmod -R 777 %s/%s" % (ff.root_password, ff.assets_base_path, train_info["projectName"]))
+                ff.postgres_execute(sql)
+                os.system("echo %s | sudo -S chmod -R 777 %s/%s" % (
+                    ff.root_password, ff.assets_base_path, train_info["projectName"]))
                 notify_message = "训练完成"
+            elif "停止训练" in status:
+                sql = "UPDATE train_record SET status=%d where task_id='%s'" % (3, train_info['taskId'])
+                log.logger.info("停止训练")
+                channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
+                ff.postgres_execute(sql)
+                notify_message = "停止训练"
                 # endregion
         log.logger.info("训练：%s Basic.GetOk %s delivery-tag %i: %s" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                                               header_frame.content_type,
-                                                               method_frame.delivery_tag,
-                                                               body.decode('utf-8')))
+                                                                      header_frame.content_type,
+                                                                      method_frame.delivery_tag,
+                                                                      body.decode('utf-8')))
     if connection.is_open:
         connection.close()
-    os.system("notify-send PowerAi状态 '项目: %s-%s\n状态: %s' -t %d" % (train_info["projectName"], train_info['taskId'], notify_message, 600000))
+    os.system("notify-send PowerAi状态 '项目: %s-%s\n状态: %s' -t %d" % (
+        train_info["projectName"], train_info['taskId'], notify_message, 55000))
     return method_frame.delivery_tag, body.decode('utf-8')
 
 
@@ -463,7 +490,8 @@ def get_test_one():
                                  image_url,
                                  test_info['providerType'],
                                  docker_volume)
-                    log.logger.info("\n\n**************************\n测试的命令: %s\n**************************\n" % train_cmd)
+                    log.logger.info(
+                        "\n\n**************************\n测试的命令: %s\n**************************\n" % train_cmd)
                 elif "正在测试" in status:
                     channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
                 elif "测试失败" in status:
@@ -531,22 +559,25 @@ def do_train_http():
         if data['providerType'] == net_framework.yolov4Tiny3l["name"]:
             modeldcfgname = net_framework.yolov4Tiny3l["modeldcfgname"]
         pretraincfgname = "" if data["pretrainWeight"] == "" else data["pretrainWeight"].split("_")[0] + ".cfg"
-        os.system(
-            "tee %s <<-'EOF'\n"
-            "bacthsize: %d\n"
-            "maxiter: %d\n"
-            "imagesie: [%d,%d]\n"
-            "modelname: '%s'\n"
-            "triantype: %d\n"
-            "pretrainweight: '%s'\n"
-            "pretraincfgname: '%s'\n"
-            "modeldcfgname: '%s'\n"
-            "gpus: '%s'\nEOF" % (
-                '{}/{}/config.yaml'.format(ff.assets_base_path, data["projectName"]),
-                data["bacthSize"], data["maxIter"], data["imageWidth"], data["imageHeight"], data["taskId"],
-                data["trianType"], data["pretrainWeight"], pretraincfgname, modeldcfgname, data["gpus"]))
-        # os.system("echo 等待训练 > %s" % '{}/{}/train_status.log'.format(ff.assets_base_path, data["projectName"]))
-        # endregion
+
+        # region 写入配置文件
+        with open('./config.yaml', 'r', encoding='utf-8') as f:
+            result = yaml.load(f.read(), Loader=yaml.FullLoader)
+            f.close()
+            result["batchsize"] = data["batchSize"]
+            result["maxiter"] = data["maxIter"]
+            result["imagesize"] = [data["imageWidth"], data["imageHeight"]]
+            result["modelname"] = data["taskId"]
+            result["triantype"] = data["trianType"]
+            result["pretrainweight"] = data["pretrainWeight"]
+            result["pretraincfgname"] = pretraincfgname
+            result["modeldcfgname"] = modeldcfgname
+            result["gpus"] = data["gpus"]
+            # result["lablelist"] = data["singleTrain"][:]
+            result["singletrain"] = data["singleTrain"][:]
+            with open('{}/{}/config.yaml'.format(ff.assets_base_path, data["projectName"]), 'w', encoding='utf-8') as fs:
+                yaml.dump(data=result, stream=fs, allow_unicode=True)
+                fs.close()
         # region 插入训练队列
         do_basic_publish('ai.train.topic', "train.start.%s" % data['projectName'], json.dumps(data))
         # endregion
@@ -569,7 +600,8 @@ def do_train_http():
                                  data["projectName"],
                                  datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                  data["providerType"], data["assetsType"],
-                                 'http://{}:{}/{}/train_{}/chart.png'.format(ff.draw_host, ff.draw_port, data["projectName"], data['taskId']),
+                                 'http://{}:{}/{}/train_{}/chart.png'.format(ff.draw_host, ff.draw_port,
+                                                                             data["projectName"], data['taskId']),
                                  data["image"]
                                  ))
         else:
@@ -688,7 +720,7 @@ def get_model_list(framework_type, path):
 
     return Response(json.dumps(
         {"res": "ok", "weights_list": weights_list, "width": width, "height": height, "max_batches": max_batches}),
-                    mimetype='application/json')
+        mimetype='application/json')
 
 
 @app.route('/get_val_path_list', methods=['GET'])
@@ -754,9 +786,9 @@ def start_test():
                 ff.assets_base_path + "/" + data["assetsDir"]))
 
             os.system('sed -i "s/^batch.*/batch=1/g" %s/yolov3-voc-test.cfg' % (
-                        ff.assets_base_path + "/" + data["assetsDir"]))
+                    ff.assets_base_path + "/" + data["assetsDir"]))
             os.system('sed -i "s/^subdivisions.*/subdivisions=1/g" %s/yolov3-voc-test.cfg' % (
-                        ff.assets_base_path + "/" + data["assetsDir"]))
+                    ff.assets_base_path + "/" + data["assetsDir"]))
 
             os.system("echo '%s' | sudo -S docker stop '%s'" % (ff.root_password, docker_name))
             cmd = "echo %s | sudo -S docker run --gpus '\"device=5\"' \
@@ -811,6 +843,13 @@ def stop_train_http():
             ff.postgres_execute("UPDATE train_record SET "
                                 "status=%d WHERE task_id='%s'" %
                                 (3, data['task_id']))
+            connection, channel, method_frame, header_frame, body = do_basic_get(queue=ff.train_queue)
+            train_info = json.loads(body.decode('utf-8'))
+            if train_info['taskId'] == data["taskId"]:
+                channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
+                # 保险起见再写入本地状态文件
+                os.system("echo '停止训练\c' > '%s/%s/train_status_%s.log'" % (
+                    ff.assets_base_path, data["projectName"], data["taskId"]))
     except Exception as e:
         log.logger.error(e)
         return Response(json.dumps({"res": "err"}), mimetype='application/json')
@@ -904,13 +943,13 @@ def restart_train_http():
 
             if "yolov3-voc_last.weights" not in data["assetsDir"]:
                 os.system("echo %s | sudo -s rm %s/backup/yolov3-voc_last.weights" % (
-                ff.root_password, ff.assets_base_path + "/" + data["assetsDir"]))
+                    ff.root_password, ff.assets_base_path + "/" + data["assetsDir"]))
             # 删除数据转换的状态文件
             os.system("echo %s | sudo -s rm %s/train_log/convert_data.log" % (
-            ff.root_password, ff.assets_base_path + "/" + data["assetsDir"]))
+                ff.root_password, ff.assets_base_path + "/" + data["assetsDir"]))
 
             # 写入正在训练，否则队列会重新执行
-            os.system("echo '正在训练\c' > '%s/%s/train_%s/train_status.log'" %
+            os.system("echo '正在训练\c' > '%s/%s/train_status_%s.log'" %
                       (ff.assets_base_path, data["assetsDir"], data["taskId"]))
 
             # 加入到训练队列
@@ -968,7 +1007,8 @@ def get_model_list_v4(framework_type, project_name):
     # framework_type = "yolov3"
     search_path = "/assets/Projects/%s/%s/*%s"
     if framework_type == net_framework.yolov4Tiny3l["name"]:
-        search_path = search_path % (project_name, net_framework.yolov4Tiny3l["modelSavePath"], net_framework.yolov4Tiny3l["modelSuffix"])
+        search_path = search_path % (
+            project_name, net_framework.yolov4Tiny3l["modelSavePath"], net_framework.yolov4Tiny3l["modelSuffix"])
 
     for item in sorted(glob.glob(search_path), key=os.path.getctime,
                        reverse=True):  # key 根据时间排序 reverse true表示倒叙
@@ -981,6 +1021,7 @@ def get_model_list_v4(framework_type, project_name):
 
 
 # 训练中心通过项目名称获取当下的模型列表
+# !!!!!!!!!!!弃用!!!!!!!!!!!!!!
 @app.route('/get_models/<project_name>', methods=['GET'])
 def get_project_models(project_name):
     models = []
@@ -988,9 +1029,11 @@ def get_project_models(project_name):
     search_path = "/assets/Projects"
     now_model = ""
     # 先获取当前发布的模型
-    for item in sorted(glob.glob(search_path + "/%s/model_release/yolov4-tiny-3l/*.weights" % project_name), key=os.path.getctime, reverse=True):
+    for item in sorted(glob.glob(search_path + "/%s/model_release/yolov4-tiny-3l/*.weights" % project_name),
+                       key=os.path.getctime, reverse=True):
         _, now_model = os.path.split(item)
-    for item in sorted(glob.glob(search_path+"/%s/backup/*.weights" % project_name), key=os.path.getctime, reverse=True):  # key 根据时间排序 reverse true表示倒叙
+    for item in sorted(glob.glob(search_path + "/%s/backup/*best*.weights" % project_name), key=os.path.getctime,
+                       reverse=True):  # key 根据时间排序 reverse true表示倒叙
         path, name = os.path.split(item)
         status = 0
         # if "final" in name or "last" in name or "best" in name:
@@ -1001,7 +1044,6 @@ def get_project_models(project_name):
         models.append({"name": name, "path": item, "status": status})
     return Response(json.dumps({"res": "ok", "message": "获取成功", "models": models}), mimetype='application/json')
 
-
 # 训练中心通过项目名称获取当下的模型列表
 @app.route('/get_release_models_history/<project_name>', methods=['GET'])
 def get_project_relase_models_history(project_name):
@@ -1010,9 +1052,11 @@ def get_project_relase_models_history(project_name):
     search_path = "/assets/Projects"
     now_model = ""
     # 先获取当前发布的模型
-    for item in sorted(glob.glob(search_path + "/%s/model_release/yolov4-tiny-3l/*.weights" % project_name), key=os.path.getctime, reverse=True):
+    for item in sorted(glob.glob(search_path + "/%s/model_release/yolov4-tiny-3l/*.weights" % project_name),
+                       key=os.path.getctime, reverse=True):
         _, now_model = os.path.split(item)
-    for item in sorted(glob.glob(search_path+"/%s/model_release_history/*.weights" % project_name), key=os.path.getmtime, reverse=True):  # key 根据时间排序 reverse true表示倒叙
+    for item in sorted(glob.glob(search_path + "/%s/model_release_history/*.weights" % project_name),
+                       key=os.path.getmtime, reverse=True):  # key 根据时间排序 reverse true表示倒叙
         path, name = os.path.split(item)
         status = 0
         if now_model == name:  ## STATUS =0  表示 不是最新发布的版本， =1标识是当前最新的版本
@@ -1027,32 +1071,218 @@ def delete_model():
     p = unquote(request.args.get('p'))
     os.system("echo %s | sudo -S rm %s" % (ff.root_password, p.replace("backup", "model_release_history")))  # 重命名模型文件
     os.system("echo %s | sudo -S rm %s" % (ff.root_password, p))
+    basePath, name = os.path.split(p)
+    fname, fename = os.path.splitext(name)  # 文件名和后缀
+    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
+    os.system("echo %s | sudo -S rm %s/%s.*" % (ff.root_password, basePath, fname))
     return Response(json.dumps({"res": "ok", "message": "成功"}), mimetype='application/json')
+
+
+def online_model_func(project_name, label_name, model_path, model_name, suggest_score):
+    model_base_path, _ = os.path.split(model_path)
+    fname, fename = os.path.splitext(model_name)  # 文件名和后缀
+
+    basePath = "/assets/Projects/%s" % project_name
+    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
+    search_path = basePath + "/backup"
+    with open("%s/suggestConfig.yaml" % search_path, 'r', encoding='utf-8') as f:
+        result = yaml.load(f.read(), Loader=yaml.FullLoader)
+        result[label_name]["unique"] = fname
+        f.close()
+        with open("%s/suggestConfig.yaml" % search_path, 'w', encoding='utf-8') as fs:
+            yaml.dump(data=result, stream=fs)
+            fs.close()
+    fuPath = basePath + "/model_release/yolov4-tiny-3l"
+    modelReleasePath = fuPath + "/" + label_name
+    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, modelReleasePath))  #
+    os.system("echo %s | sudo -S mkdir -p %s" % (ff.root_password, modelReleasePath))  #
+    os.system("echo %s | sudo -S cp -rf %s %s" % (
+    ff.root_password, model_path, modelReleasePath + "/" + label_name + ".weights"))  #
+    if suggest_score is not None:
+        os.system("echo %s | sudo -S echo '%s' > %s" % (
+            ff.root_password, suggest_score, modelReleasePath + "/suggest_score.txt"))  #
+
+    os.system("echo %s | sudo -S cp -rf %s %s" % (
+    ff.root_password, model_path.replace(".weights", ".cfg"), modelReleasePath + "/" + label_name + ".cfg"))  #
+    os.system(
+        "echo %s | sudo -S echo '%s' > %s" % (ff.root_password, label_name, modelReleasePath + "/labels.names"))  #
+    os.system("echo %s | sudo -S cp -rf %s %s" % (
+    ff.root_password, search_path + "/labels.names", fuPath + "/labels.names"))  #
+    os.system("echo %s | sudo -S zip -jq %s %s/*" % (ff.root_password, modelReleasePath + ".zip", modelReleasePath))  #
 
 
 # 模型发布并且上线
 @app.route('/online_model', methods=['PUT'])
 def online_model():
-    is_history = request.args.get('is_history', type=int, default=0)
-    p = unquote(request.args.get('p'))
-    release = "-" + datetime.now().strftime('%Y%m%d') + "-release"
-    if is_history == 1:
-        p = p.replace("model_release_history", "backup")
-        release = ''
-    basePath, name = os.path.split(p)
-    fname, fename = os.path.splitext(name)
-    finalFilename = "%s/%s%s%s" % (basePath, fname, release, fename)
-    configFilename = "%s/%s.*" % (basePath, name.split('_')[0])
-    os.system("echo %s | sudo chmod -R 777 %s" % (ff.root_password, os.path.split(basePath)[0]))  # 重命名模型文件
-    os.system("echo %s | sudo -S rm %s/*" % (ff.root_password, basePath.replace("backup", "model_release/yolov4-tiny-3l")))  # 重命名模型文件
-    os.system("echo %s | sudo -S mv %s %s" % (ff.root_password, p, finalFilename))  # 重命名模型文件
-    os.system("echo %s | sudo -S ln %s %s" % (ff.root_password, finalFilename, basePath.replace("backup", "model_release/yolov4-tiny-3l")))  # 硬链接模型文件
-    os.system("echo %s | sudo -S cp -r %s %s" % (ff.root_password, configFilename, basePath.replace("backup", "model_release/yolov4-tiny-3l")))  # 硬链接配置文件
-
-    os.system("echo %s | sudo -S ln -s %s %s" % (ff.root_password, finalFilename, basePath.replace("backup", "model_release_history")))  # 硬链接模型文件
-    os.system("echo %s | sudo -S ln -s %s %s" % (ff.root_password, configFilename, basePath.replace("backup", "model_release_history")))  # 硬链接配置文件
+    model_path = unquote(request.args.get('model_path'))
+    label_name = unquote(request.args.get('label_name'))
+    model_name = unquote(request.args.get('model_name'))
+    project_name = unquote(request.args.get('project_name'))
+    suggest_score = unquote(request.args.get('suggest_score'))
+    # release = "-" + datetime.now().strftime('%Y%m%d') + "-release"
+    online_model_func(project_name, label_name, model_path, model_name, suggest_score)
     return Response(json.dumps({"res": "ok", "message": "成功"}), mimetype='application/json')
 
+
+# 获取当前项目的标签
+@app.route('/get_labels/<project_name>', methods=['GET'])
+def get_labels(project_name):
+    basePath = "/assets/Projects/%s" % project_name
+    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))  # 重命名模型文件
+    label_file = basePath + "/backup/labels.names"
+    labels = []
+    if os.path.exists(label_file):
+        lines = open(label_file, 'r')
+        for line in lines:
+            labels.append(line.replace("\n", ""))
+        lines.close()
+    # for dirpath, dirnames, filenames in os.walk(search_path + project_name):
+    #     for file in filenames:
+    #         fullpath = os.path.join(dirpath, file)
+    #         if fullpath.endswith(".names"):
+    #             lines = open(fullpath, 'r')
+    #             for line in lines:
+    #                 labels.append(line.replace("\n", ""))
+    #             lines.close()
+    return Response(json.dumps({"res": "ok", "message": "成功", "labels": list(dict.fromkeys(labels).keys())}),
+                    mimetype='application/json')
+
+# 获取当前项目的标签
+@app.route('/get_labels_with_score/<project_name>', methods=['GET'])
+def get_labels_with_score(project_name):
+    basePath = "/assets/Projects/%s" % project_name
+    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))  # 重命名模型文件
+    search_path = basePath + "/backup"
+    label_file = search_path + "/labels.names"
+    suggest_file = "%s/suggestConfig.yaml" % search_path
+    labels = []
+    has_score = False
+    if os.path.exists(suggest_file):
+        has_score = True
+        with open("%s/suggestConfig.yaml" % search_path, 'r', encoding='utf-8') as f:
+            result = yaml.load(f.read(), Loader=yaml.FullLoader)
+            f.close()
+    if os.path.exists(label_file):
+        lines = open(label_file, 'r')
+        for line in lines:
+            try:
+                label = line.replace("\n", "")
+                if has_score and result is not None:
+                    labels.append({"label_name": label, "score": result[label]["suggestPro"]})
+                    # 只在发布为空的情况下生成
+                    if not os.path.exists(basePath + "/model_release/yolov4-tiny-3l/" + label + ".zip"):
+                        online_model_func(project_name, label,
+                                          search_path + "/" + label + "/" + result[label]["unique"] + ".weights",
+                                          result[label]["unique"] + ".weights", result[label]["suggestPro"])
+                else:
+                    labels.append({"label_name": label, "score": None})
+                    # 只在发布为空的情况下生成
+                    if not os.path.exists(basePath + "/model_release/yolov4-tiny-3l/" + label + ".zip"):
+                        online_model_func(project_name, label,
+                                          search_path + "/" + label + "/" + result[label]["unique"] + ".weights",
+                                          result[label]["unique"] + ".weights", None)
+            except:
+                log.logger.error("err publish models")
+        lines.close()
+    # for dirpath, dirnames, filenames in os.walk(search_path + project_name):
+    #     for file in filenames:
+    #         fullpath = os.path.join(dirpath, file)
+    #         if fullpath.endswith(".names"):
+    #             lines = open(fullpath, 'r')
+    #             for line in lines:
+    #                 labels.append(line.replace("\n", ""))
+    #             lines.close()
+    return Response(json.dumps({"res": "ok", "message": "成功", "labels": labels}),
+                    mimetype='application/json')
+
+# 更新推荐置信度参数并计算
+@app.route('/suggest_score', methods=['PUT'])
+def suggest_score_put():
+    maxDetPerdm = request.args.get('maxDetPerdm', type=float)
+    pixel2realLength = request.args.get('pixel2realLength', type=float)
+    project_name = unquote(request.args.get('project_name'))
+
+    basePath = "/assets/Projects/%s" % project_name
+    os.system("echo '%s' | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))  # 重命名模型文件
+    search_path = basePath + "/backup"
+    suggest_file = "%s/suggestConfig.yaml" % search_path
+    if not os.path.exists(suggest_file):
+        return Response(json.dumps({"res": "err", "message": "训练可能还未完成，现在无法计算推荐置信度"}),
+                        mimetype='application/json')
+    with open(suggest_file, 'r', encoding='utf-8') as f:
+        result = yaml.load(f.read(), Loader=yaml.FullLoader)
+        f.close()
+        with open(suggest_file, 'w', encoding='utf-8') as fs:
+            result["maxDetPerdm"] = maxDetPerdm
+            result["pixel2realLength"] = pixel2realLength
+            yaml.dump(data=result, stream=fs)
+            fs.close()
+    with open(basePath + "/config.yaml", 'r', encoding='utf-8') as f:
+        config = yaml.load(f.read(), Loader=yaml.FullLoader)
+        f.close()
+
+    train_cmd = "dockertrain -n '%s' -v '%s' -w '%s' -t 2 -r '%s' -f '%s' -d '%s'" % \
+                (config["modelname"],
+                 basePath,
+                 ff.root_password,
+                 "registry.cn-hangzhou.aliyuncs.com/qtingvision/suggest-score:last",
+                 "yolov4-tiny-3l",
+                 "/Afinaltrain/SourDatas")
+    log.logger.info("\n\n**************************\n训练的命令: %s\n**************************\n" % train_cmd)
+    res = os.popen(train_cmd).read().replace('\n', '')
+    log.logger.info("\n\n**************************\n训练的命令: 执行结果 > %s\n**************************\n" % res)
+    return Response(json.dumps({"res": "ok", "message": "已成功提交计算推荐置信度，计算完结果会直接发布到AOI更新，您也可以稍后来这查看结果"}),
+                    mimetype='application/json')
+
+# 获取推荐置信度参数
+@app.route('/suggest_score', methods=['GET'])
+def suggest_score_get():
+    maxDetPerdm = None
+    pixel2realLength = None
+    project_name = unquote(request.args.get('project_name'))
+    basePath = "/assets/Projects/%s" % project_name
+    os.system("echo '%s' | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
+    search_path = basePath + "/backup"
+    suggest_file = "%s/suggestConfig.yaml" % search_path
+    if not os.path.exists(suggest_file):
+        return Response(json.dumps(
+            {"res": "ok", "message": "成功", "maxDetPerdm": maxDetPerdm, "pixel2realLength": pixel2realLength}),
+                        mimetype='application/json')
+    with open(suggest_file, 'r', encoding='utf-8') as f:
+        result = yaml.load(f.read(), Loader=yaml.FullLoader)
+        f.close()
+        if "maxDetPerdm" in result:
+            maxDetPerdm = result["maxDetPerdm"]
+        if "pixel2realLength" in result:
+            pixel2realLength = result["pixel2realLength"]
+    return Response(json.dumps({"res": "ok", "message": "成功", "maxDetPerdm": maxDetPerdm, "pixel2realLength": pixel2realLength}),
+                    mimetype='application/json')
+
+# 训练中心通过项目名称和标签获取当下的模型列表
+@app.route('/get_models/<project_name>/<label_name>', methods=['GET'])
+def get_project_label_models(project_name, label_name):
+    models = []
+    basePath = "/assets/Projects/%s" % project_name
+    os.system("echo '%s' | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
+    search_path = basePath + "/backup"
+    # framework_type = "yolov3"
+    # 先获取当前发布的模型
+    suggest_file = "%s/suggestConfig.yaml" % search_path
+    if os.path.exists(suggest_file):
+        with open(suggest_file, 'r', encoding='utf-8') as f:
+            result = yaml.load(f.read(), Loader=yaml.FullLoader)
+            now_model = str(result[label_name]['unique']) + ".weights"
+            now_model_path = search_path + "/" + label_name + "/" + now_model
+            if os.path.exists(now_model_path):
+                models.append({"name": now_model, "path": now_model_path, "status": 2})
+            f.close()
+    for item in sorted(glob.glob(search_path + "/%s/*.weights" % label_name), key=os.path.getctime,
+                       reverse=True):  # key 根据时间排序 reverse true表示倒叙
+        path, name = os.path.split(item)
+        status = 0
+        if now_model != name:
+            models.append({"name": name, "path": item, "label_name": label_name, "status": status})
+    return Response(json.dumps({"res": "ok", "message": "获取成功", "models": models}), mimetype='application/json')
 
 # 这是给AOI的升级模型接口
 @app.route('/get_models', methods=['GET'])
@@ -1060,8 +1290,9 @@ def get_models():
     projects = []
     # framework_type = "yolov3"
     search_path = "/assets/Projects"
-    httpUrl = "http://192.168.31.102:1121"
-    for item in sorted(glob.glob(search_path+"/*"), key=os.path.getctime, reverse=True):  # key 根据时间排序 reverse true表示倒叙
+    httpUrl = "http://" + get_host_ip() + ":1121"
+    for item in sorted(glob.glob(search_path + "/*"), key=os.path.getctime,
+                       reverse=True):  # key 根据时间排序 reverse true表示倒叙
         _, project = os.path.split(item)
         if os.path.isdir(item):
             one_project = {"project_name": project, "list": []}
@@ -1070,30 +1301,44 @@ def get_models():
             for one_framework in glob.glob(f_path + "*"):
                 _, one_framework_dir_name = os.path.split(one_framework)
                 fra = {"net_framework": one_framework_dir_name, "models": []}
-                for one_model in sorted(glob.glob(f_path + one_framework_dir_name + "/*"), key=os.path.getctime, reverse=True):
-                    baseUrl = one_model.replace(search_path, httpUrl)
-                    fra["models"].append(baseUrl)
+                for one_model in sorted(glob.glob(f_path + one_framework_dir_name + "/*"), key=os.path.getctime,
+                                        reverse=True):
+                    if one_model.endswith(".zip") or one_model.endswith(".names"):
+                        baseUrl = one_model.replace(search_path, httpUrl)
+                        fra["models"].append(baseUrl)
                 one_project["list"].append(fra)
             projects.append(one_project)
     return Response(json.dumps({"res": 0, "message": "获取成功", "project_list": projects}), mimetype='application/json')
+
+def get_host_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+    finally:
+        s.close()
+    return ip
+
 # endregion
 
 class Logger(object):
     level_relations = {
-        'debug':logging.DEBUG,
-        'info':logging.INFO,
-        'warning':logging.WARNING,
-        'error':logging.ERROR,
-        'crit':logging.CRITICAL
+        'debug': logging.DEBUG,
+        'info': logging.INFO,
+        'warning': logging.WARNING,
+        'error': logging.ERROR,
+        'crit': logging.CRITICAL
     }  # 日志级别关系映射
 
-    def __init__(self, filename, level='info', when='D', backCount=30, fmt='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s'):
+    def __init__(self, filename, level='info', when='D', backCount=30,
+                 fmt='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s'):
         self.logger = logging.getLogger(filename)
         format_str = logging.Formatter(fmt)  # 设置日志格式
         self.logger.setLevel(self.level_relations.get(level))  # 设置日志级别
         sh = logging.StreamHandler()  # 往屏幕上输出
         sh.setFormatter(format_str)  # 设置屏幕上显示的格式
-        th = handlers.TimedRotatingFileHandler(filename=filename, when=when, backupCount=backCount, encoding='utf-8')  # 往文件里写入#指定间隔时间自动生成文件的处理器
+        th = handlers.TimedRotatingFileHandler(filename=filename, when=when, backupCount=backCount,
+                                               encoding='utf-8')  # 往文件里写入#指定间隔时间自动生成文件的处理器
         # 实例化TimedRotatingFileHandler
         # interval是时间间隔，backupCount是备份文件的个数，如果超过这个个数，就会自动删除，when是间隔的时间单位，单位有以下几种：
         # S 秒
@@ -1106,9 +1351,21 @@ class Logger(object):
         self.logger.addHandler(sh)  # 把对象加到logger里
         self.logger.addHandler(th)
 
+def fucking():
+    str = "echo %s | sudo -S docker ps |grep `cat %s/cece/train.dname`" % (
+    ff.root_password, ff.assets_base_path)
+    p = subprocess.Popen(str, shell=True,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
+    p.wait()
+    res = p.stdout.read()
+    print(res)
+    if '' == res or len(res) < 10:
+        print("acvaasdsd")
 
 if __name__ == '__main__':
+    ip = get_host_ip()
     log = Logger('server.log', when="D")
+    log.logger.error("开始了")
     if not os.path.isfile("/usr/local/bin/dockertrain"):
         print("dockertrain 执行文件不存在")
         exit(99)
@@ -1118,11 +1375,11 @@ if __name__ == '__main__':
         ff = pikaqiu(root_password='baymin1024', host='192.168.31.77', username='baymin', password='baymin1024',
                      assets_base_path='/assets/Projects')
     else:
-        ff = pikaqiu(root_password='icubic-123', host='192.168.31.77', username='baymin', password='baymin1024',
+        ff = pikaqiu(root_password='baymin1024', host='192.168.31.77', username='baymin', password='baymin1024',
                      assets_base_path='/assets/Projects')
     # init(self, sql=True, sql_host='localhost', draw=True, draw_host='localhost', draw_port=8097):
     # sql: 是否开启数据库，sql_host：数据库地址，draw：是否开启画图，draw_host：画图的服务地址，draw_port：画图的服务端口
-    ff.init(sql=False, sql_host='192.168.31.77', draw_host='localhost', draw_port=1121)
+    ff.init(sql=True, sql_host='192.168.31.77', draw_host='localhost', draw_port=1121)
 
     # 创建后台执行的 schedulers
     scheduler = BackgroundScheduler()
@@ -1143,8 +1400,9 @@ if __name__ == '__main__':
     '''
     get_train_one()
     if debug:
-        scheduler.add_job(get_train_one, 'interval', minutes=10000)
-        scheduler.add_job(get_test_one, 'interval', seconds=5)
+        scheduler.add_job(get_train_one, 'interval', minutes=1)
+        # scheduler.add_job(get_test_one, 'interval', seconds=5)
+        # scheduler.add_job(fucking, 'interval', seconds=5)
     else:
         if wechat_monitor:
             bot = Bot(cache_path=True, console_qr=True)
@@ -1152,8 +1410,8 @@ if __name__ == '__main__':
             my_friend = bot.friends().search('郭永龙')[0]
             # my_friend.send('微信监督开始')
             bot.file_helper.send('微信监督开始')
-        scheduler.add_job(get_train_one, 'interval', minutes=10)
-        scheduler.add_job(get_test_one, 'interval', seconds=5)
+        scheduler.add_job(get_train_one, 'interval', minutes=1)
+        # scheduler.add_job(get_test_one, 'interval', seconds=5)
     # scheduler.add_job(get_package_one, 'interval', seconds=5)
     scheduler.start()
 
