@@ -95,6 +95,12 @@ export async function del_model(params) {
     });
 }
 
+export async function get_model_size(params) {
+    return request(`http://${ip}/get_model_size?${stringify(params)}`, {
+        method: 'GET',
+    });
+}
+
 export async function online_model(params) {
     return request(`http://${ip}/online_model?${stringify(params)}`, {
         method: 'PUT',
