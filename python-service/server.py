@@ -212,10 +212,10 @@ class pikaqiu(object):
             os.system("echo %s | sudo -S docker run \
             --name service-web-loss \
             -p %d:80 \
-            -v /assets/Projects/:/usr/local/apache2/htdocs/ \
+            -v %s:/usr/local/apache2/htdocs/ \
             --net ai --ip 10.10.0.99 \
             --restart=always \
-            -d registry.cn-hangzhou.aliyuncs.com/baymin/remote-train:web-v3.5" % (self.root_password, draw_port))
+            -d registry.cn-hangzhou.aliyuncs.com/baymin/remote-train:web-v3.5" % (self.root_password, draw_port, self.assets_base_path))
         if sql:
             self.postgres_connect(host=sql_host)
         connection = pika.BlockingConnection(self.parameters)
@@ -304,24 +304,21 @@ def get_train_one():
     else:
         # 这里需要检查训练素材包是否已经解包，如果未解包，这里需要拒绝，让它重新排队ff.channel.basic_nack
         train_info = json.loads(body.decode('utf-8'))
-        os.system("echo '%s' | sudo -S chmod -R 777 %s/%s/train_%s" % (
-            ff.root_password, ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
+        os.system("echo '%s' | sudo -S chmod -R 777 %s/%s/training_data" % (
+            ff.root_password, ff.assets_base_path, train_info["projectName"]))
         # 判断训练状态文件是否存在
-        if not os.path.exists("%s/%s/train_status_%s.log" % (
+        if not os.path.exists("%s/%s/training_data/train_status_%s.log" % (
                 ff.assets_base_path, train_info["projectName"], train_info["taskId"])):
             log.logger.info('%s 等待训练' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-            os.system("echo '%s' | sudo -S mkdir -p %s/%s/train_%s" % (
-                ff.root_password, ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
-            os.system("echo '%s' | sudo -S chmod -R 777 %s/%s/" % (
-                ff.root_password, ff.assets_base_path, train_info["projectName"]))
-            os.system("echo '等待训练\c' > '%s/%s/train_status_%s.log'" % (
-                ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
             channel.basic_nack(method_frame.delivery_tag)
+            os.system("echo '等待训练\c' > '%s/%s/training_data/train_status_%s.log'" %
+                      (ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
             notify_message = "等待训练"
             log.logger.info(notify_message)
         else:
-            status = os.popen("cat '%s/%s/train_status_%s.log' | head -n 1" %
-                              (ff.assets_base_path, train_info["projectName"], train_info["taskId"])).read().replace('\n', '')
+            status = os.popen("cat '%s/%s/training_data/train_status_%s.log' | head -n 1" %
+                              (ff.assets_base_path, train_info["projectName"], train_info["taskId"])).read().replace(
+                '\n', '')
             if "等待训练" in status:
                 channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
 
@@ -374,13 +371,13 @@ def get_train_one():
                           (container_id, -1, train_info['taskId'])
                     log.logger.error("训练:" + sql)
                     ff.postgres_execute(sql)
-                    os.system("echo '训练失败\c' > '%s/%s/train_status_%s.log'" %
+                    os.system("echo '训练失败\c' > '%s/%s/training_data/train_status_%s.log'" %
                               (ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
                     channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
                     return
                 # 如果res长度==64，那么就是container_id
 
-                os.system("echo '正在训练\c' > '%s/%s/train_status_%s.log'" %
+                os.system("echo '正在训练\c' > '%s/%s/training_data/train_status_%s.log'" %
                           (ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
 
                 # region 更新数据库
@@ -406,18 +403,22 @@ def get_train_one():
                 ff.postgres_execute(sql)
                 # # 这里再查询下容器运行状态是否正常
                 str = "echo %s | sudo -S docker ps |grep %s" % (ff.root_password, train_info["taskId"])
+                log.logger.info(str)
                 notify_message = "正在训练......."
                 res = os.popen(str).read()
+                log.logger.error("正在训练>查询容器是否包含%s，执行结果%s" % (train_info["taskId"], res))
                 if '' == res:
                     # 这里说明容器已经停止了，先判断下是不是训练完了
-                    cmd = "cat '%s/%s/train_status_%s.log' | head -n 1" % (ff.assets_base_path, train_info["projectName"],train_info["taskId"])
-                    print(cmd)
-                    if "训练完成" not in os.popen(cmd).read().replace('\n', ''):
-                        os.system("echo '训练失败\c' > '%s/%s/train_status_%s.log'" %
+                    cmd = "cat '%s/%s/training_data/train_status_%s.log' | head -n 1" % (
+                    ff.assets_base_path, train_info["projectName"], train_info["taskId"])
+                    log.logger.info(cmd)
+                    str = os.popen(cmd).read().replace('\n', '')
+                    if "训练完成" not in str:
+                        log.logger.error("正在训练>容器停止-未训完> 训练状态脚本执行结果：%s" % str)
+                        os.system("echo '训练失败\c' > '%s/%s/training_data/train_status_%s.log'" %
                                   (ff.assets_base_path, train_info["projectName"], train_info["taskId"]))
                         if connection.is_open:
                             connection.close()
-                        get_train_one()
             elif "训练失败" in status:
                 sql = "UPDATE train_record SET status=%d where task_id='%s'" % (-1, train_info['taskId'])
                 log.logger.error("训练出错")
@@ -560,6 +561,10 @@ def do_train_http():
             modeldcfgname = net_framework.yolov4Tiny3l["modeldcfgname"]
         pretraincfgname = "" if data["pretrainWeight"] == "" else data["pretrainWeight"].split("_")[0] + ".cfg"
 
+        os.system("echo %s | sudo -S mkdir -p %s/%s/training_data" % (
+            ff.root_password, ff.assets_base_path, data["projectName"]))
+        os.system("echo %s | sudo -S chmod -R 777 %s/%s/training_data" % (
+            ff.root_password, ff.assets_base_path, data["projectName"]))
         # region 写入配置文件
         with open('./config.yaml', 'r', encoding='utf-8') as f:
             result = yaml.load(f.read(), Loader=yaml.FullLoader)
@@ -575,7 +580,15 @@ def do_train_http():
             result["gpus"] = data["gpus"]
             # result["lablelist"] = data["singleTrain"][:]
             result["singletrain"] = data["singleTrain"][:]
-            with open('{}/{}/config.yaml'.format(ff.assets_base_path, data["projectName"]), 'w', encoding='utf-8') as fs:
+            result["angle"] = data["angle"]
+            result["cell_stride"] = data["cell_stride"]
+            result["cellsize"] = data["cellsize"]
+            result["expand_size"] = data["expand_size"][:]
+            result["ignore_size"] = data["ignore_size"][:]
+            result["resizearrange"] = data["resizearrange"][:]
+            result["trainwithnolabelpic"] = data["trainwithnolabelpic"]
+            with open('{}/{}/training_data/config.yaml'.format(ff.assets_base_path, data["projectName"]), 'w',
+                      encoding='utf-8') as fs:
                 yaml.dump(data=result, stream=fs, allow_unicode=True)
                 fs.close()
         # region 插入训练队列
@@ -600,7 +613,7 @@ def do_train_http():
                                  data["projectName"],
                                  datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                  data["providerType"], data["assetsType"],
-                                 'http://{}:{}/{}/train_{}/chart.png'.format(ff.draw_host, ff.draw_port,
+                                 'http://{}:{}/{}/training_data/train_{}/chart.png'.format(ff.draw_host, ff.draw_port,
                                                                              data["projectName"], data['taskId']),
                                  data["image"]
                                  ))
@@ -848,7 +861,7 @@ def stop_train_http():
             if train_info['taskId'] == data["taskId"]:
                 channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
                 # 保险起见再写入本地状态文件
-                os.system("echo '停止训练\c' > '%s/%s/train_status_%s.log'" % (
+                os.system("echo '停止训练\c' > '%s/%s/training_data/train_status_%s.log'" % (
                     ff.assets_base_path, data["projectName"], data["taskId"]))
     except Exception as e:
         log.logger.error(e)
@@ -990,7 +1003,7 @@ def restart_train_http():
 def get_local_projects():
     path_list = []
     # framework_type = "yolov3"
-    search_path = "/assets/Projects/*"
+    search_path = ff.assets_base_path + "/*"
     for item in sorted(glob.glob(search_path), key=os.path.getctime,
                        reverse=True):  # key 根据时间排序 reverse true表示倒叙
         filepath, tempfilename = os.path.split(item)
@@ -1005,7 +1018,7 @@ def get_local_projects():
 def get_model_list_v4(framework_type, project_name):
     model_list = []
     # framework_type = "yolov3"
-    search_path = "/assets/Projects/%s/%s/*%s"
+    search_path = ff.assets_base_path + "/%s/%s/*%s"
     if framework_type == net_framework.yolov4Tiny3l["name"]:
         search_path = search_path % (
             project_name, net_framework.yolov4Tiny3l["modelSavePath"], net_framework.yolov4Tiny3l["modelSuffix"])
@@ -1026,7 +1039,7 @@ def get_model_list_v4(framework_type, project_name):
 def get_project_models(project_name):
     models = []
     # framework_type = "yolov3"
-    search_path = "/assets/Projects"
+    search_path = ff.assets_base_path
     now_model = ""
     # 先获取当前发布的模型
     for item in sorted(glob.glob(search_path + "/%s/model_release/yolov4-tiny-3l/*.weights" % project_name),
@@ -1044,12 +1057,13 @@ def get_project_models(project_name):
         models.append({"name": name, "path": item, "status": status})
     return Response(json.dumps({"res": "ok", "message": "获取成功", "models": models}), mimetype='application/json')
 
+
 # 训练中心通过项目名称获取当下的模型列表
 @app.route('/get_release_models_history/<project_name>', methods=['GET'])
 def get_project_relase_models_history(project_name):
     models = []
     # framework_type = "yolov3"
-    search_path = "/assets/Projects"
+    search_path = ff.assets_base_path
     now_model = ""
     # 先获取当前发布的模型
     for item in sorted(glob.glob(search_path + "/%s/model_release/yolov4-tiny-3l/*.weights" % project_name),
@@ -1078,11 +1092,11 @@ def delete_model():
     return Response(json.dumps({"res": "ok", "message": "成功"}), mimetype='application/json')
 
 
-def online_model_func(project_name, label_name, model_path, model_name, suggest_score):
+def online_model_func(project_name, label_name, model_path, model_name, suggest_score, width=None, height=None):
     model_base_path, _ = os.path.split(model_path)
     fname, fename = os.path.splitext(model_name)  # 文件名和后缀
 
-    basePath = "/assets/Projects/%s" % project_name
+    basePath = ff.assets_base_path + "/" + project_name
     os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
     search_path = basePath + "/backup"
     with open("%s/suggestConfig.yaml" % search_path, 'r', encoding='utf-8') as f:
@@ -1097,18 +1111,54 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
     os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, modelReleasePath))  #
     os.system("echo %s | sudo -S mkdir -p %s" % (ff.root_password, modelReleasePath))  #
     os.system("echo %s | sudo -S cp -rf %s %s" % (
-    ff.root_password, model_path, modelReleasePath + "/" + label_name + ".weights"))  #
+        ff.root_password, model_path, modelReleasePath + "/" + label_name + ".weights"))  #
     if suggest_score is not None:
         os.system("echo %s | sudo -S echo '%s' > %s" % (
             ff.root_password, suggest_score, modelReleasePath + "/suggest_score.txt"))  #
 
     os.system("echo %s | sudo -S cp -rf %s %s" % (
-    ff.root_password, model_path.replace(".weights", ".cfg"), modelReleasePath + "/" + label_name + ".cfg"))  #
+        ff.root_password, model_path.replace(".weights", ".cfg"), modelReleasePath + "/" + label_name + ".cfg"))  #
     os.system(
         "echo %s | sudo -S echo '%s' > %s" % (ff.root_password, label_name, modelReleasePath + "/labels.names"))  #
     os.system("echo %s | sudo -S cp -rf %s %s" % (
-    ff.root_password, search_path + "/labels.names", fuPath + "/labels.names"))  #
+        ff.root_password, search_path + "/labels.names", fuPath + "/labels.names"))  #
+
+    # 替换网络尺寸
+    if width is not None:
+        os.system("echo %s | sudo -S sed -i 's/^width.*=/width=%d #/' %s" %
+                  (ff.root_password, width, modelReleasePath + "/" + label_name + ".cfg"))  #
+    if height is not None:
+        os.system("echo %s | sudo -S sed -i 's/^height.*=/height=%d #/' %s" %
+                  (ff.root_password, height, modelReleasePath + "/" + label_name + ".cfg"))  #
     os.system("echo %s | sudo -S zip -jq %s %s/*" % (ff.root_password, modelReleasePath + ".zip", modelReleasePath))  #
+
+
+@app.route('/get_model_size', methods=['GET'])
+def get_model_size():
+    model_name = unquote(request.args.get('model_name'))
+    label_name = unquote(request.args.get('label_name'))
+    project_name = unquote(request.args.get('project_name'))
+
+    basePath = ff.assets_base_path + "/" + project_name
+    fname, fename = os.path.splitext(model_name)  # 文件名和后缀
+
+    cfgFile = basePath + "/backup/" + label_name + "/" + fname + ".cfg"
+
+    width = os.popen(
+        "sed -rn '/^width.*=[0-9]{1,}/p' %s | sed 's/width//g' | sed 's/=//g' |sed 's/ //g' |sed -r 's/#.*//g'" %
+        cfgFile).read().replace('\n', '')
+    height = os.popen(
+        "sed -rn '/^height.*=[0-9]{1,}/p' %s | sed 's/height//g' | sed 's/=//g' |sed 's/ //g' |sed -r 's/#.*//g'" %
+        cfgFile).read().replace('\n', '')
+    s = "echo %s | sudo -S hostname -I" % ff.root_password
+    ips = str(os.popen(s).read()).replace(" \n", "").split(' ')
+
+    defaultIp = str(os.popen("echo %s | sudo -S cat %s" % (ff.root_password, "./ip")).read()).replace("\n", "").replace(" ", "")
+    if defaultIp == "" and len(ips) > 0:
+        defaultIp = ips[0]
+    return Response(json.dumps({"res": "ok", "message": "成功",
+                                "width": width, "height": height, "ips": ips, "defaultIp": defaultIp}),
+                    mimetype='application/json')
 
 
 # 模型发布并且上线
@@ -1119,15 +1169,19 @@ def online_model():
     model_name = unquote(request.args.get('model_name'))
     project_name = unquote(request.args.get('project_name'))
     suggest_score = unquote(request.args.get('suggest_score'))
+    ip = unquote(request.args.get('ip'))
+    width = request.args.get('width', type=int, default=None)
+    height = request.args.get('height', type=int, default=None)
     # release = "-" + datetime.now().strftime('%Y%m%d') + "-release"
-    online_model_func(project_name, label_name, model_path, model_name, suggest_score)
+    online_model_func(project_name, label_name, model_path, model_name, suggest_score, width, height)
+    os.system("echo %s | sudo -S echo '%s' > '%s'" % (ff.root_password, ip, "./ip"))  # 重命名模型文件
     return Response(json.dumps({"res": "ok", "message": "成功"}), mimetype='application/json')
 
 
 # 获取当前项目的标签
 @app.route('/get_labels/<project_name>', methods=['GET'])
 def get_labels(project_name):
-    basePath = "/assets/Projects/%s" % project_name
+    basePath = ff.assets_base_path + "/" + project_name
     os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))  # 重命名模型文件
     label_file = basePath + "/backup/labels.names"
     labels = []
@@ -1147,10 +1201,11 @@ def get_labels(project_name):
     return Response(json.dumps({"res": "ok", "message": "成功", "labels": list(dict.fromkeys(labels).keys())}),
                     mimetype='application/json')
 
+
 # 获取当前项目的标签
 @app.route('/get_labels_with_score/<project_name>', methods=['GET'])
 def get_labels_with_score(project_name):
-    basePath = "/assets/Projects/%s" % project_name
+    basePath = ff.assets_base_path + "/" + project_name
     os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))  # 重命名模型文件
     search_path = basePath + "/backup"
     label_file = search_path + "/labels.names"
@@ -1195,6 +1250,7 @@ def get_labels_with_score(project_name):
     return Response(json.dumps({"res": "ok", "message": "成功", "labels": labels}),
                     mimetype='application/json')
 
+
 # 更新推荐置信度参数并计算
 @app.route('/suggest_score', methods=['PUT'])
 def suggest_score_put():
@@ -1202,7 +1258,7 @@ def suggest_score_put():
     pixel2realLength = request.args.get('pixel2realLength', type=float)
     project_name = unquote(request.args.get('project_name'))
 
-    basePath = "/assets/Projects/%s" % project_name
+    basePath = ff.assets_base_path + "/" + project_name
     os.system("echo '%s' | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))  # 重命名模型文件
     search_path = basePath + "/backup"
     suggest_file = "%s/suggestConfig.yaml" % search_path
@@ -1234,20 +1290,21 @@ def suggest_score_put():
     return Response(json.dumps({"res": "ok", "message": "已成功提交计算推荐置信度，计算完结果会直接发布到AOI更新，您也可以稍后来这查看结果"}),
                     mimetype='application/json')
 
+
 # 获取推荐置信度参数
 @app.route('/suggest_score', methods=['GET'])
 def suggest_score_get():
     maxDetPerdm = None
     pixel2realLength = None
     project_name = unquote(request.args.get('project_name'))
-    basePath = "/assets/Projects/%s" % project_name
+    basePath = ff.assets_base_path + "/" + project_name
     os.system("echo '%s' | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
     search_path = basePath + "/backup"
     suggest_file = "%s/suggestConfig.yaml" % search_path
     if not os.path.exists(suggest_file):
         return Response(json.dumps(
             {"res": "ok", "message": "成功", "maxDetPerdm": maxDetPerdm, "pixel2realLength": pixel2realLength}),
-                        mimetype='application/json')
+            mimetype='application/json')
     with open(suggest_file, 'r', encoding='utf-8') as f:
         result = yaml.load(f.read(), Loader=yaml.FullLoader)
         f.close()
@@ -1255,14 +1312,16 @@ def suggest_score_get():
             maxDetPerdm = result["maxDetPerdm"]
         if "pixel2realLength" in result:
             pixel2realLength = result["pixel2realLength"]
-    return Response(json.dumps({"res": "ok", "message": "成功", "maxDetPerdm": maxDetPerdm, "pixel2realLength": pixel2realLength}),
-                    mimetype='application/json')
+    return Response(
+        json.dumps({"res": "ok", "message": "成功", "maxDetPerdm": maxDetPerdm, "pixel2realLength": pixel2realLength}),
+        mimetype='application/json')
+
 
 # 训练中心通过项目名称和标签获取当下的模型列表
 @app.route('/get_models/<project_name>/<label_name>', methods=['GET'])
 def get_project_label_models(project_name, label_name):
     models = []
-    basePath = "/assets/Projects/%s" % project_name
+    basePath = ff.assets_base_path + "/" + project_name
     os.system("echo '%s' | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
     search_path = basePath + "/backup"
     # framework_type = "yolov3"
@@ -1284,13 +1343,24 @@ def get_project_label_models(project_name, label_name):
             models.append({"name": name, "path": item, "label_name": label_name, "status": status})
     return Response(json.dumps({"res": "ok", "message": "获取成功", "models": models}), mimetype='application/json')
 
+# 获取推荐置信度参数
+@app.route('/ips', methods=['GET'])
+def ip_get():
+    s = "echo %s | sudo -S hostname -I" % ff.root_password
+    log.logger.info(s)
+    res = str(os.popen(s).read()).replace(" \n", "").split(' ')
+    return Response(
+        json.dumps({"res": "ok", "message": "成功", "ips": res}),
+        mimetype='application/json')
+
 # 这是给AOI的升级模型接口
 @app.route('/get_models', methods=['GET'])
 def get_models():
     projects = []
     # framework_type = "yolov3"
-    search_path = "/assets/Projects"
-    httpUrl = "http://" + get_host_ip() + ":1121"
+    search_path = ff.assets_base_path
+    defaultIp = str(os.popen("echo %s | sudo -S cat %s" % (ff.root_password, "./ip")).read()).replace("\n", "").replace(" ", "")
+    httpUrl = "http://" + defaultIp + ":1121"
     for item in sorted(glob.glob(search_path + "/*"), key=os.path.getctime,
                        reverse=True):  # key 根据时间排序 reverse true表示倒叙
         _, project = os.path.split(item)
@@ -1309,16 +1379,6 @@ def get_models():
                 one_project["list"].append(fra)
             projects.append(one_project)
     return Response(json.dumps({"res": 0, "message": "获取成功", "project_list": projects}), mimetype='application/json')
-
-def get_host_ip():
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('8.8.8.8', 80))
-        ip = s.getsockname()[0]
-    finally:
-        s.close()
-    return ip
-
 # endregion
 
 class Logger(object):
@@ -1351,9 +1411,10 @@ class Logger(object):
         self.logger.addHandler(sh)  # 把对象加到logger里
         self.logger.addHandler(th)
 
+
 def fucking():
     str = "echo %s | sudo -S docker ps |grep `cat %s/cece/train.dname`" % (
-    ff.root_password, ff.assets_base_path)
+        ff.root_password, ff.assets_base_path)
     p = subprocess.Popen(str, shell=True,
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
     p.wait()
@@ -1362,8 +1423,8 @@ def fucking():
     if '' == res or len(res) < 10:
         print("acvaasdsd")
 
+
 if __name__ == '__main__':
-    ip = get_host_ip()
     log = Logger('server.log', when="D")
     log.logger.error("开始了")
     if not os.path.isfile("/usr/local/bin/dockertrain"):
@@ -1372,11 +1433,11 @@ if __name__ == '__main__':
     debug = False
     wechat_monitor = False
     if debug:
-        ff = pikaqiu(root_password='baymin1024', host='192.168.31.77', username='baymin', password='baymin1024',
-                     assets_base_path='/assets/Projects')
+        ff = pikaqiu(root_password='scholmi1024', host='localhost', username='baymin', password='baymin1024',
+                     assets_base_path='/qtingvisionfolder/Projects')
     else:
         ff = pikaqiu(root_password='baymin1024', host='192.168.31.77', username='baymin', password='baymin1024',
-                     assets_base_path='/assets/Projects')
+                     assets_base_path='/qtingvisionfolder/Projects')
     # init(self, sql=True, sql_host='localhost', draw=True, draw_host='localhost', draw_port=8097):
     # sql: 是否开启数据库，sql_host：数据库地址，draw：是否开启画图，draw_host：画图的服务地址，draw_port：画图的服务端口
     ff.init(sql=True, sql_host='192.168.31.77', draw_host='localhost', draw_port=1121)
