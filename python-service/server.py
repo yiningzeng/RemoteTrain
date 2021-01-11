@@ -587,6 +587,9 @@ def do_train_http():
             result["ignore_size"] = data["ignore_size"][:]
             result["resizearrange"] = data["resizearrange"][:]
             result["trainwithnolabelpic"] = data["trainwithnolabelpic"]
+            result["subdivisionssize"] = data["subdivisionssize"]
+            result["rmgeneratedata"] = data["rmgeneratedata"]
+            result["split_ratio"] = data["split_ratio"]
             with open('{}/{}/training_data/config.yaml'.format(ff.assets_base_path, data["projectName"]), 'w',
                       encoding='utf-8') as fs:
                 yaml.dump(data=result, stream=fs, allow_unicode=True)
