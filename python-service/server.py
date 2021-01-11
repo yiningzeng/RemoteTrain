@@ -1099,12 +1099,18 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
     model_base_path, _ = os.path.split(model_path)
     fname, fename = os.path.splitext(model_name)  # 文件名和后缀
 
+    taskName = ""
+    suc, rows = ff.postgres_execute("select task_name from train_record where task_id ='%s'" % fname, True)
+    if suc and rows is not None and len(rows) > 0:
+        taskName = rows[0][0]
+
     basePath = ff.assets_base_path + "/" + project_name
     os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
     search_path = basePath + "/backup"
     with open("%s/suggestConfig.yaml" % search_path, 'r', encoding='utf-8') as f:
         result = yaml.load(f.read(), Loader=yaml.FullLoader)
         result[label_name]["unique"] = fname
+        result[label_name]["releaseDate"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
         f.close()
         with open("%s/suggestConfig.yaml" % search_path, 'w', encoding='utf-8') as fs:
             yaml.dump(data=result, stream=fs)
@@ -1115,6 +1121,14 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
     os.system("echo %s | sudo -S mkdir -p %s" % (ff.root_password, modelReleasePath))  #
     os.system("echo %s | sudo -S cp -rf %s %s" % (
         ff.root_password, model_path, modelReleasePath + "/" + label_name + ".weights"))  #
+
+    os.system("echo %s | sudo -S echo '训练任务名称: %s\n模型发布日期: %s' > %s" % (
+        ff.root_password, taskName, result[label_name]["releaseDate"], modelReleasePath + "/model_info.txt"))  #
+
+    with open("%s/suggestConfig.yaml" % search_path, 'w', encoding='utf-8') as fs:
+            yaml.dump(data=result, stream=fs)
+            fs.close()
+
     if suggest_score is not None:
         os.system("echo %s | sudo -S echo '%s' > %s" % (
             ff.root_password, suggest_score, modelReleasePath + "/suggest_score.txt"))  #
