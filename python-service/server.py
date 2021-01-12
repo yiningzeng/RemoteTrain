@@ -215,7 +215,8 @@ class pikaqiu(object):
             -v %s:/usr/local/apache2/htdocs/ \
             --net ai --ip 10.10.0.99 \
             --restart=always \
-            -d registry.cn-hangzhou.aliyuncs.com/baymin/remote-train:web-v3.5" % (self.root_password, draw_port, self.assets_base_path))
+            -d registry.cn-hangzhou.aliyuncs.com/baymin/remote-train:web-v3.5" % (
+                self.root_password, draw_port, self.assets_base_path))
         if sql:
             self.postgres_connect(host=sql_host)
         connection = pika.BlockingConnection(self.parameters)
@@ -410,7 +411,7 @@ def get_train_one():
                 if '' == res:
                     # 这里说明容器已经停止了，先判断下是不是训练完了
                     cmd = "cat '%s/%s/training_data/train_status_%s.log' | head -n 1" % (
-                    ff.assets_base_path, train_info["projectName"], train_info["taskId"])
+                        ff.assets_base_path, train_info["projectName"], train_info["taskId"])
                     log.logger.info(cmd)
                     str = os.popen(cmd).read().replace('\n', '')
                     if "训练完成" not in str:
@@ -618,7 +619,8 @@ def do_train_http():
                                  datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                  data["providerType"], data["assetsType"],
                                  'http://{}:{}/{}/training_data/train_{}/chart.png'.format(ff.draw_host, ff.draw_port,
-                                                                             data["projectName"], data['taskId']),
+                                                                                           data["projectName"],
+                                                                                           data['taskId']),
                                  data["image"]
                                  ))
         else:
@@ -1171,7 +1173,8 @@ def get_model_size():
     s = "echo %s | sudo -S hostname -I" % ff.root_password
     ips = str(os.popen(s).read()).replace(" \n", "").split(' ')
 
-    defaultIp = str(os.popen("echo %s | sudo -S cat %s" % (ff.root_password, "./ip")).read()).replace("\n", "").replace(" ", "")
+    defaultIp = str(os.popen("echo %s | sudo -S cat %s" % (ff.root_password, "./ip")).read()).replace("\n", "").replace(
+        " ", "")
     if defaultIp == "" and len(ips) > 0:
         defaultIp = ips[0]
     return Response(json.dumps({"res": "ok", "message": "成功",
@@ -1361,6 +1364,7 @@ def get_project_label_models(project_name, label_name):
             models.append({"name": name, "path": item, "label_name": label_name, "status": status})
     return Response(json.dumps({"res": "ok", "message": "获取成功", "models": models}), mimetype='application/json')
 
+
 # 获取推荐置信度参数
 @app.route('/ips', methods=['GET'])
 def ip_get():
@@ -1371,13 +1375,15 @@ def ip_get():
         json.dumps({"res": "ok", "message": "成功", "ips": res}),
         mimetype='application/json')
 
+
 # 这是给AOI的升级模型接口
 @app.route('/get_models', methods=['GET'])
 def get_models():
     projects = []
     # framework_type = "yolov3"
     search_path = ff.assets_base_path
-    defaultIp = str(os.popen("echo %s | sudo -S cat %s" % (ff.root_password, "./ip")).read()).replace("\n", "").replace(" ", "")
+    defaultIp = str(os.popen("echo %s | sudo -S cat %s" % (ff.root_password, "./ip")).read()).replace("\n", "").replace(
+        " ", "")
     httpUrl = "http://" + defaultIp + ":1121"
     for item in sorted(glob.glob(search_path + "/*"), key=os.path.getctime,
                        reverse=True):  # key 根据时间排序 reverse true表示倒叙
@@ -1397,6 +1403,8 @@ def get_models():
                 one_project["list"].append(fra)
             projects.append(one_project)
     return Response(json.dumps({"res": 0, "message": "获取成功", "project_list": projects}), mimetype='application/json')
+
+
 # endregion
 
 class Logger(object):
