@@ -454,61 +454,6 @@ def get_train_one():
     return method_frame.delivery_tag, body.decode('utf-8')
 
 
-# 获取单个训练队列数据
-def get_test_one():
-    log.logger.info('get_test_one:%s' % (datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-    connection, channel, method_frame, header_frame, body = do_basic_get(queue=ff.test_queue)
-    if method_frame is None:
-        return None, None
-    else:
-        test_info = json.loads(body.decode('utf-8'))
-        testing = int(os.popen(
-            "echo %s | sudo -S docker ps -a | grep %s |wc -l" % (ff.root_password, "power-ai-testing")).read().replace(
-            '\n', ''))
-        if testing == 0:
-            if not os.path.exists("%s/%s/test_status" % (ff.assets_base_path, test_info["assetsDir"])):
-                os.system("echo '等待检测\c' > '%s/%s/test_status'" %
-                          (ff.assets_base_path, test_info["assetsDir"]))
-                channel.basic_nack(method_frame.delivery_tag)
-            else:
-                status = os.popen("cat '%s/%s/test_status' | head -n 1" %
-                                  (ff.assets_base_path, test_info["assetsDir"])).read().replace('\n', '')
-                if "等待检测" in status:
-                    channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
-                    image_url = None
-                    docker_volume = None
-                    if test_info['providerType'] == 'yolov3':
-                        docker_volume = "/darknet/assets"
-                    elif test_info['providerType'] == 'fasterRcnn':
-                        docker_volume = "/Detectron/detectron/datasets/data"
-                    elif test_info['providerType'] == 'maskRcnn':
-                        docker_volume = "/Detectron/detectron/datasets/data"
-                    elif test_info['providerType'] == 'other':
-                        docker_volume = test_info['providerOptions']['docker_volume']
-                    train_cmd = "dockertrain -n 'Power-Ai-%s' -v '%s' -w '%s' -t 2 -r '%s' -f '%s' -d '%s'" % \
-                                (test_info["projectId"],
-                                 ff.assets_base_path + "/" + test_info["assetsDir"],
-                                 ff.root_password,
-                                 image_url,
-                                 test_info['providerType'],
-                                 docker_volume)
-                    log.logger.info(
-                        "\n\n**************************\n测试的命令: %s\n**************************\n" % train_cmd)
-                elif "正在测试" in status:
-                    channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
-                elif "测试失败" in status:
-                    channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
-                elif "测试完成" in status:
-                    os.system("echo %s | sudo -S chmod -R 777 %s/%s" % (
-                        ff.root_password, ff.assets_base_path, test_info["assetsDir"]))
-                    os.system("rm %s/%s/test_status" % (ff.assets_base_path, test_info["assetsDir"]))
-                    os.system("tar -C %s -cf %s/%s.tar infer" % (ff.assets_base_path + "/" + test_info["assetsDir"],
-                                                                 ff.assets_base_path + "/" + test_info["assetsDir"],
-                                                                 test_info["assetsDir"] + "检测结果"))
-                    os.system("rm -r %s/%s/infer" % (ff.assets_base_path, test_info["assetsDir"]))
-                    channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
-    connection.close()
-    return method_frame.delivery_tag, body.decode('utf-8')
 
 
 @app.route('/power-ai-train', methods=['POST'])
@@ -597,7 +542,7 @@ def do_train_http():
                 yaml.dump(data=result, stream=fs, allow_unicode=True)
                 fs.close()
         # region 插入训练队列
-        do_basic_publish('ai.train.topic', "train.start.%s" % data['projectName'], json.dumps(data))
+        do_basic_publish('ai.train.topic', "train.start.%s" % data['projectName'], yaml.dump(result))
         # endregion
         # region 更新数据库
         # 这里插入前需要判断是否存在相同的项目
@@ -694,160 +639,6 @@ def get_train_list_http():
                  'create_time': str(row[12])
                  })
         return Response(json.dumps(ret_json), mimetype='application/json')
-
-
-# region 测试服务的所有接口
-@app.route('/get_model_list/<framework_type>/<path>', methods=['GET'])
-def get_model_list(framework_type, path):
-    weights_list = []
-    width = 0
-    height = 0
-    max_batches = 0
-    # framework_type = "yolov3"
-    search_path = "/assets/%s/backup/*.weights"
-    if framework_type == 'yolov3':
-        search_path = "/assets/%s/backup/*.weights"
-        cmd = "sed -n '/width/p' %s/yolov3-voc.cfg | sed 's/width//g' |sed 's/=//g' |sed 's/ //g'" % (
-                ff.assets_base_path + "/" + path)
-        width = os.popen(cmd).read().replace('\n', '')
-        height = os.popen("sed -n '/height/p' %s/yolov3-voc.cfg | sed 's/height//g' |sed 's/=//g' |sed 's/ //g'" % (
-                ff.assets_base_path + "/" + path)).read().replace('\n', '')
-        max_batches = os.popen(
-            "sed -n '/max_batches/p' %s/yolov3-voc.cfg | sed 's/max_batches//g' |sed 's/=//g' |sed 's/ //g'" % (
-                    ff.assets_base_path + "/" + path)).read().replace('\n', '')
-    elif framework_type == 'fasterRcnn' or framework_type == 'maskRcnn':
-        search_path = "/assets/%s/result/train/coco_2014_train/generalized_rcnn/*.pkl"
-        max_batches = os.popen(
-            "sed -n '/MAX_ITER/p' %s/train-config.yaml | sed 's/MAX_ITER//g' |sed 's/://g' |sed 's/ //g'" % (
-                    ff.assets_base_path + "/" + path)).read().replace('\n', '')
-    # region detectron2
-    elif framework_type == 'fasterRcnn2' or framework_type == 'maskRcnn2' or framework_type == 'keypointRcnn2':
-        search_path = "/assets/%s/output/*.pth"
-        max_batches = os.popen(
-            "sed -n '/MAX_ITER/p' %s/train-config.yaml | sed 's/MAX_ITER//g' |sed 's/://g' |sed 's/ //g'" % (
-                    ff.assets_base_path + "/" + path)).read().replace('\n', '')
-    # endregion
-    elif framework_type == 'other':
-        search_path = "不支持，后续开发"
-
-    for item in sorted(glob.glob(search_path % path), key=os.path.getctime,
-                       reverse=True):  # key 根据时间排序 reverse true表示倒叙
-        filepath, tempfilename = os.path.split(item)
-        if "server.pkl" in tempfilename or "test.weights" in tempfilename:
-            continue
-        weights_list.append({"path": item, "filename": tempfilename})
-
-    return Response(json.dumps(
-        {"res": "ok", "weights_list": weights_list, "width": width, "height": height, "max_batches": max_batches}),
-        mimetype='application/json')
-
-
-@app.route('/get_val_path_list', methods=['GET'])
-def get_val_path_list():
-    path_list = []
-    # framework_type = "yolov3"
-    search_path = "/assets/StandardValidationData/*"
-    for item in sorted(glob.glob(search_path), key=os.path.getctime,
-                       reverse=True):  # key 根据时间排序 reverse true表示倒叙
-        filepath, tempfilename = os.path.split(item)
-        if os.path.isdir(item):
-            path_list.append({"path": item, "dir_name": tempfilename})
-
-    return Response(json.dumps({"res": "ok", "val_path_list": path_list}), mimetype='application/json')
-
-
-@app.route('/get_voc_path_list', methods=['GET'])
-def get_voc_path_list():
-    path_list = []
-    # framework_type = "yolov3"
-    search_path = "/PowerAiData/*"
-    for item in sorted(glob.glob(search_path), key=os.path.getctime,
-                       reverse=True):  # key 根据时间排序 reverse true表示倒叙
-        filepath, tempfilename = os.path.split(item)
-        if os.path.isdir(item):
-            path_list.append({"path": item, "dir_name": tempfilename})
-
-    return Response(json.dumps({"res": "ok", "voc_path_list": path_list}), mimetype='application/json')
-
-
-@app.route('/start_test', methods=['POST'])  # 这里新增  weights: undefined, valPath: undefined,
-def start_test():
-    try:
-        data = request.json
-        if data is not None:
-            docker_volume = "/darknet/assets"
-            docker_volume_model = "/darknet/assets/backup/yolov3-voc_last.weights"
-            port = data['port']  # 检测服务的端口 容器内外都一致，java 中间件对外端口在这个基础上+1
-            docker_name = "darknet-service-testing"  # 用于每次新建 删除
-            if data['providerType'] == 'yolov3':
-                docker_name = "darknet-service-testing"
-                docker_volume = "/darknet/assets"
-                docker_volume_model = "/darknet/assets/backup/yolov3-voc_last.weights"
-            elif data['providerType'] == 'fasterRcnn':
-                docker_name = "detectron-service-testing"
-                docker_volume = "/Detectron/detectron/datasets/data"
-                docker_volume_model = "/Detectron/detectron/datasets/data/result/train/coco_2014_train/generalized_rcnn/server.pkl"
-            elif data['providerType'] == 'maskRcnn':
-                docker_name = "detectron-service-testing"
-                docker_volume = "/Detectron/detectron/datasets/data"
-                docker_volume_model = "/Detectron/detectron/datasets/data/result/train/coco_2014_train/generalized_rcnn/server.pkl"
-            elif data['providerType'] == 'fasterRcnn2' or data['providerType'] == 'maskRcnn2':
-                docker_name = "detectron2-service-testing"
-                docker_volume = "/detectron2/datasets"
-                docker_volume_model = "/detectron2/datasets/model_test.pth"
-            elif data['providerType'] == 'other':
-                docker_name = "other-service-testing"
-                docker_volume = data['docker_volume']
-                docker_volume_model = data['docker_volume_model']
-
-            os.system('cp %s/yolov3-voc.cfg %s/yolov3-voc-test.cfg' % (
-                ff.assets_base_path + "/" + data["assetsDir"],
-                ff.assets_base_path + "/" + data["assetsDir"]))
-
-            os.system('sed -i "s/^batch.*/batch=1/g" %s/yolov3-voc-test.cfg' % (
-                    ff.assets_base_path + "/" + data["assetsDir"]))
-            os.system('sed -i "s/^subdivisions.*/subdivisions=1/g" %s/yolov3-voc-test.cfg' % (
-                    ff.assets_base_path + "/" + data["assetsDir"]))
-
-            os.system("echo '%s' | sudo -S docker stop '%s'" % (ff.root_password, docker_name))
-            cmd = "echo %s | sudo -S docker run --gpus '\"device=5\"' \
-                        --name %s \
-                        -p %d:8070 \
-                        -p %d:%d \
-                        -v /opt/remote_train_web/aiimg/:/aiimg \
-                        -v /opt/remote_train_web/excel/:/excel \
-                        -v /etc/localtime:/etc/localtime:ro \
-                        -v '%s':'%s' \
-                        -v '%s':'%s' \
-                        --add-host service-postgresql:10.10.0.4 \
-                        --add-host service-rabbitmq:10.10.0.3 \
-                        --add-host service-ftp:10.10.0.2 \
-                        --add-host service-web:10.10.0.5 \
-                        --rm -d %s" % (
-                ff.root_password,
-                docker_name,
-                port + 1,
-                port, port,
-                ff.assets_base_path + "/" + data["assetsDir"], docker_volume,
-                data["weights"], docker_volume_model,
-                data["image"])
-            log.logger.info("\n\n**************************\n测试的命令: %s\n**************************\n" % cmd)
-            os.system(cmd)
-            start_time = time.time()
-            while 1:
-                time.sleep(0.5)
-                if net_is_used(int(port)):
-                    break
-                if (time.time() - start_time) > 60:
-                    return Response(json.dumps({"res": "err", "msg": "开启超时，请手动查询状态"}), mimetype='application/json')
-            # registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:darknet_auto_test-service-ai-power-v4.5
-    except Exception as e:
-        log.logger.error(e)
-        return Response(json.dumps({"res": "err", "msg": "开启失败"}), mimetype='application/json')
-    return Response(json.dumps({"res": "ok", "msg": "开启成功"}), mimetype='application/json')
-
-
-# endregion 测试服务的所有接口
 
 
 @app.route('/stop_train', methods=['POST'])  # 此处提交的参数projectId改为taskId
@@ -1037,31 +828,6 @@ def get_model_list_v4(framework_type, project_name):
         model_list.append({"path": item, "filename": tempfilename})
 
     return Response(json.dumps({"res": "ok", "model_list": model_list}), mimetype='application/json')
-
-
-# 训练中心通过项目名称获取当下的模型列表
-# !!!!!!!!!!!弃用!!!!!!!!!!!!!!
-@app.route('/get_models/<project_name>', methods=['GET'])
-def get_project_models(project_name):
-    models = []
-    # framework_type = "yolov3"
-    search_path = ff.assets_base_path
-    now_model = ""
-    # 先获取当前发布的模型
-    for item in sorted(glob.glob(search_path + "/%s/model_release/yolov4-tiny-3l/*.weights" % project_name),
-                       key=os.path.getctime, reverse=True):
-        _, now_model = os.path.split(item)
-    for item in sorted(glob.glob(search_path + "/%s/backup/*best*.weights" % project_name), key=os.path.getctime,
-                       reverse=True):  # key 根据时间排序 reverse true表示倒叙
-        path, name = os.path.split(item)
-        status = 0
-        # if "final" in name or "last" in name or "best" in name:
-        if "release" in name:
-            status = 1
-        if now_model == name:
-            status = 2
-        models.append({"name": name, "path": item, "status": status})
-    return Response(json.dumps({"res": "ok", "message": "获取成功", "models": models}), mimetype='application/json')
 
 
 # 训练中心通过项目名称获取当下的模型列表
@@ -1259,55 +1025,6 @@ def get_labels_with_publish_date(project_name):
                     labels.append({"label_name": label, "release_date": result[label]["releaseDate"]})
                 else:
                     labels.append({"label_name": label, "release_date": None})
-            except:
-                log.logger.error("err publish models")
-        lines.close()
-    # for dirpath, dirnames, filenames in os.walk(search_path + project_name):
-    #     for file in filenames:
-    #         fullpath = os.path.join(dirpath, file)
-    #         if fullpath.endswith(".names"):
-    #             lines = open(fullpath, 'r')
-    #             for line in lines:
-    #                 labels.append(line.replace("\n", ""))
-    #             lines.close()
-    return Response(json.dumps({"res": "ok", "message": "成功", "labels": labels}),
-                    mimetype='application/json')
-
-
-# 获取当前项目的标签 弃用！！！！
-@app.route('/get_labels_with_score/<project_name>', methods=['GET'])
-def get_labels_with_score(project_name):
-    basePath = ff.assets_base_path + "/" + project_name
-    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))  # 重命名模型文件
-    search_path = basePath + "/backup"
-    label_file = search_path + "/labels.names"
-    suggest_file = "%s/suggestConfig.yaml" % search_path
-    labels = []
-    has_score = False
-    if os.path.exists(suggest_file):
-        has_score = True
-        with open("%s/suggestConfig.yaml" % search_path, 'r', encoding='utf-8') as f:
-            result = yaml.load(f.read(), Loader=yaml.FullLoader)
-            f.close()
-    if os.path.exists(label_file):
-        lines = open(label_file, 'r')
-        for line in lines:
-            try:
-                label = line.replace("\n", "")
-                if has_score and result is not None:
-                    labels.append({"label_name": label, "score": result[label]["suggestPro"]})
-                    # 只在发布为空的情况下生成
-                    if not os.path.exists(basePath + "/model_release/yolov4-tiny-3l/" + label + ".zip"):
-                        online_model_func(project_name, label,
-                                          search_path + "/" + label + "/" + result[label]["unique"] + ".weights",
-                                          result[label]["unique"] + ".weights", result[label]["suggestPro"])
-                else:
-                    labels.append({"label_name": label, "score": None})
-                    # 只在发布为空的情况下生成
-                    if not os.path.exists(basePath + "/model_release/yolov4-tiny-3l/" + label + ".zip"):
-                        online_model_func(project_name, label,
-                                          search_path + "/" + label + "/" + result[label]["unique"] + ".weights",
-                                          result[label]["unique"] + ".weights", None)
             except:
                 log.logger.error("err publish models")
         lines.close()
