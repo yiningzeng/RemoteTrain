@@ -32,7 +32,7 @@ recall_suggest_pro: []
 resizearrange:
 - 0.3
 - 1.2
-rmgeneratedata: 1
+rmgeneratedata: 1 # 0是删除 1：不删   是否删除训练生成的临时数据
 scale: 1
 singletrain: []
 split_ratio: 0.95
@@ -40,3 +40,4 @@ subdivisionssize: 8
 sum_suggest_pro: []
 traintype: 0
 trainwithnolabelpic: 100000
+recalldatum: 2
