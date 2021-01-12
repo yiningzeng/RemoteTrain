@@ -1110,46 +1110,61 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
     basePath = ff.assets_base_path + "/" + project_name
     os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
     search_path = basePath + "/backup"
-    with open("%s/suggestConfig.yaml" % search_path, 'r', encoding='utf-8') as f:
-        result = yaml.load(f.read(), Loader=yaml.FullLoader)
-        result[label_name]["unique"] = fname
-        result[label_name]["releaseDate"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-        f.close()
-        with open("%s/suggestConfig.yaml" % search_path, 'w', encoding='utf-8') as fs:
-            yaml.dump(data=result, stream=fs)
-            fs.close()
+
+    # 首先查看是否存在已经发布的版本文件
+    result = {}
+    if os.path.exists("%s/modelRelease.yaml" % search_path):
+        with open("%s/modelRelease.yaml" % search_path, 'r', encoding='utf-8') as f:
+            result = yaml.load(f.read(), Loader=yaml.FullLoader)
+            f.close()
+    # 开始写入发布的信息
+    releaseDate = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    releaseDateFile = "%s/%s.releaseDate" % (model_base_path, fname)
+    if os.path.exists(releaseDateFile): # 先判断是不是已经存在发布日期的文件
+        with open(releaseDateFile, "r") as fs:
+            releaseDate = fs.readline().replace("\n", "") # 已经存在那么把发布日期改为真实的日期
+    else: # 不存在，那么新建发布日期
+        os.system("echo %s | sudo -S echo '%s' > %s/%s.releaseDate" % (
+            ff.root_password, releaseDate, model_base_path, fname))  #
+
+    result[label_name] = {"unique": fname, "releaseDate": releaseDate, "suggestScore": suggest_score}
+    with open("%s/modelRelease.yaml" % search_path, 'w', encoding='utf-8') as fs:
+        yaml.dump(data=result, stream=fs)
+        fs.close()
     fuPath = basePath + "/model_release/yolov4-tiny-3l"
     modelReleasePath = fuPath + "/" + label_name
     os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, modelReleasePath))  #
     os.system("echo %s | sudo -S mkdir -p %s" % (ff.root_password, modelReleasePath))  #
+
+    # 复制模型文件到发布目录
     os.system("echo %s | sudo -S cp -rf %s %s" % (
         ff.root_password, model_path, modelReleasePath + "/" + label_name + ".weights"))  #
-
+    # 写入发布信息文件到发布目录
     os.system("echo %s | sudo -S echo '训练任务名称: %s\n模型发布日期: %s' > %s" % (
-        ff.root_password, taskName, result[label_name]["releaseDate"], modelReleasePath + "/model_info.txt"))  #
-
-    with open("%s/suggestConfig.yaml" % search_path, 'w', encoding='utf-8') as fs:
-            yaml.dump(data=result, stream=fs)
-            fs.close()
-
-    if suggest_score is not None:
-        os.system("echo %s | sudo -S echo '%s' > %s" % (
-            ff.root_password, suggest_score, modelReleasePath + "/suggest_score.txt"))  #
-
+        ff.root_password, taskName, releaseDate, modelReleasePath + "/model_info.txt"))  #
+    # 复制配置文件到发布目录
     os.system("echo %s | sudo -S cp -rf %s %s" % (
         ff.root_password, model_path.replace(".weights", ".cfg"), modelReleasePath + "/" + label_name + ".cfg"))  #
+    # 复制推荐置信度文件到发布目录
+    os.system("echo %s | sudo -S cp -rf %s %s" % (
+        ff.root_password, model_path.replace(".weights", ".suggest"), modelReleasePath + "/suggest_score.txt"))  #
+    # 写入labels.names到发布目录
     os.system(
         "echo %s | sudo -S echo '%s' > %s" % (ff.root_password, label_name, modelReleasePath + "/labels.names"))  #
+    # 复制backup里的labels.names到发布目录
     os.system("echo %s | sudo -S cp -rf %s %s" % (
         ff.root_password, search_path + "/labels.names", fuPath + "/labels.names"))  #
 
     # 替换网络尺寸
-    if width is not None:
-        os.system("echo %s | sudo -S sed -i 's/^width.*=/width=%d #/' %s" %
-                  (ff.root_password, width, modelReleasePath + "/" + label_name + ".cfg"))  #
-    if height is not None:
-        os.system("echo %s | sudo -S sed -i 's/^height.*=/height=%d #/' %s" %
-                  (ff.root_password, height, modelReleasePath + "/" + label_name + ".cfg"))  #
+    try:
+        if width is not None:
+            os.system("echo %s | sudo -S sed -i 's/^width.*=/width=%d #/' %s" %
+                      (ff.root_password, width, modelReleasePath + "/" + label_name + ".cfg"))  #
+        if height is not None:
+            os.system("echo %s | sudo -S sed -i 's/^height.*=/height=%d #/' %s" %
+                      (ff.root_password, height, modelReleasePath + "/" + label_name + ".cfg"))  #
+    except:
+        log.logger.error("err change project size")
     os.system("echo %s | sudo -S zip -jq %s %s/*" % (ff.root_password, modelReleasePath + ".zip", modelReleasePath))  #
 
 
@@ -1223,7 +1238,43 @@ def get_labels(project_name):
                     mimetype='application/json')
 
 
-# 获取当前项目的标签
+# 获取当前项目的标签和模型发布的最新日期
+@app.route('/get_labels_with_info/<project_name>', methods=['GET'])
+def get_labels_with_publish_date(project_name):
+    basePath = ff.assets_base_path + "/" + project_name
+    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
+    search_path = basePath + "/backup"
+    label_file = search_path + "/labels.names"
+    suggest_file = "%s/modelRelease.yaml" % search_path
+    labels = []
+    with open(suggest_file, 'r', encoding='utf-8') as f:
+        result = yaml.load(f.read(), Loader=yaml.FullLoader)
+        f.close()
+    if os.path.exists(label_file):
+        lines = open(label_file, 'r')
+        for line in lines:
+            try:
+                label = line.replace("\n", "")
+                if result is not None and label in result.keys():
+                    labels.append({"label_name": label, "release_date": result[label]["releaseDate"]})
+                else:
+                    labels.append({"label_name": label, "release_date": None})
+            except:
+                log.logger.error("err publish models")
+        lines.close()
+    # for dirpath, dirnames, filenames in os.walk(search_path + project_name):
+    #     for file in filenames:
+    #         fullpath = os.path.join(dirpath, file)
+    #         if fullpath.endswith(".names"):
+    #             lines = open(fullpath, 'r')
+    #             for line in lines:
+    #                 labels.append(line.replace("\n", ""))
+    #             lines.close()
+    return Response(json.dumps({"res": "ok", "message": "成功", "labels": labels}),
+                    mimetype='application/json')
+
+
+# 获取当前项目的标签 弃用！！！！
 @app.route('/get_labels_with_score/<project_name>', methods=['GET'])
 def get_labels_with_score(project_name):
     basePath = ff.assets_base_path + "/" + project_name
@@ -1347,21 +1398,43 @@ def get_project_label_models(project_name, label_name):
     search_path = basePath + "/backup"
     # framework_type = "yolov3"
     # 先获取当前发布的模型
-    suggest_file = "%s/suggestConfig.yaml" % search_path
-    if os.path.exists(suggest_file):
-        with open(suggest_file, 'r', encoding='utf-8') as f:
+    model_file = "%s/modelRelease.yaml" % search_path
+    now_model = ""
+    if os.path.exists(model_file):
+        with open(model_file, 'r', encoding='utf-8') as f:
             result = yaml.load(f.read(), Loader=yaml.FullLoader)
-            now_model = str(result[label_name]['unique']) + ".weights"
-            now_model_path = search_path + "/" + label_name + "/" + now_model
-            if os.path.exists(now_model_path):
-                models.append({"name": now_model, "path": now_model_path, "status": 2})
+            if label_name in result.keys():
+                now_model = str(result[label_name]['unique']) + ".weights"
+                now_model_path = search_path + "/" + label_name + "/" + now_model
+                if os.path.exists(now_model_path):
+                    suggest_file = search_path + "/" + label_name + "/" + str(result[label_name]['unique']) + ".suggest"
+                    release_date_file = search_path + "/" + label_name + "/" + str(result[label_name]['unique']) + ".releaseDate"
+                    suggest_score = None
+                    release_date = None
+                    if os.path.exists(suggest_file):
+                        with open(suggest_file, "r") as fs:
+                            suggest_score = fs.readline().replace("\n", "")
+                    if os.path.exists(release_date_file):
+                        with open(release_date_file, "r") as fs:
+                            release_date = fs.readline().replace("\n", "")
+                    models.append({"name": now_model, "suggest_score": suggest_score, "release_date": release_date, "path": now_model_path, "status": 2})
             f.close()
     for item in sorted(glob.glob(search_path + "/%s/*.weights" % label_name), key=os.path.getctime,
                        reverse=True):  # key 根据时间排序 reverse true表示倒叙
         path, name = os.path.split(item)
         status = 0
         if now_model != name:
-            models.append({"name": name, "path": item, "label_name": label_name, "status": status})
+            suggest_file = item.replace(os.path.splitext(item)[1], ".suggest")
+            release_date_file = item.replace(os.path.splitext(item)[1], ".releaseDate")
+            suggest_score = None
+            release_date = None
+            if os.path.exists(suggest_file):
+                with open(suggest_file, "r") as fs:
+                    suggest_score = fs.readline().replace("\n", "")
+            if os.path.exists(release_date_file):
+                with open(release_date_file, "r") as fs:
+                    release_date = fs.readline().replace("\n", "")
+            models.append({"name": name, "suggest_score": suggest_score, "release_date": release_date, "path": item, "label_name": label_name, "status": status})
     return Response(json.dumps({"res": "ok", "message": "获取成功", "models": models}), mimetype='application/json')
 
 
