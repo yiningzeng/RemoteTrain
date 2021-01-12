@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import Iframe from 'react-iframe';
-import { SettingOutlined, SmileTwoTone } from '@ant-design/icons';
+import { SettingOutlined, SmileTwoTone, CloudUploadOutlined } from '@ant-design/icons';
 import '@ant-design/compatible/assets/index.css';
 import dva, { connect } from 'dva';
 import {
@@ -106,7 +106,7 @@ class FreeFish extends React.Component {
                 batchSize: 64,
                 imageWidth: 512,
                 imageHeight: 512,
-                maxIter: 200000, // 训练最大轮数
+                maxIter: 120000, // 训练最大轮数
                 pretrainWeight: "", // 预训练权重文件
                 gpus: "0,1", // 使用的gpu id
                 trianType: 0,  // 0对应从头训练 1对应自训练 2 漏检训练
@@ -114,11 +114,16 @@ class FreeFish extends React.Component {
 
                 angle: 360,
                 cell_stride: 1, //平移步长
-                cellsize: 128, //平移框大小
+                cellsize: 16, //平移框大小
                 expand_size: [8,8], //扩展尺寸
                 ignore_size: [6,6],//忽略尺寸
-                resizearrange: [0.2, 1.2], // anchor  调整变化幅度
-                trainwithnolabelpic: 200000, //最大负样本数
+                resizearrange: [0.3, 1.6], // anchor  调整变化幅度
+                trainwithnolabelpic: 1000, //最大负样本数
+
+                subdivisionssize: 16,
+                rmgeneratedata: 0, // 是否保留训练生成的临时数据
+                split_ratio: 0.95, // 训练样本占比
+                recalldatum: 2, // 检出率基准
             },
         },
         suggestScore: {
@@ -479,14 +484,24 @@ class FreeFish extends React.Component {
                             title: '模型名称',
                             key: "name",
                             dataIndex: 'name',
+                        },  {
+                            title: '推荐置信度',
+                            key: "suggest_score",
+                            dataIndex: 'suggest_score',
                         }, {
                             title: '发布状态',
                             key: "status",
                             dataIndex: 'status',
                             render: v => {
-                                if (v === 1) return <Badge status="warning" text="已发布"/>;
-                                else if (v === 2) return <Badge status="processing" text="已发布(线上更新版本)"/>;
+                                if (v === 1) return <Badge status="warning" text="已撤销"/>;
+                                else if (v === 2) return <Badge status="processing" text="已发布"/>;
                             },
+                        }, {
+                            title: '发布日期',
+                            render: (text, record) => {
+                                    if (record.status === 2) return <Tag icon={<CloudUploadOutlined/>} color="success">{record.release_date}</Tag>;
+                                    else return record.release_date;
+                                }
                         }, {
                             title: '操作',
                             render: (text, record) => (
@@ -517,7 +532,7 @@ class FreeFish extends React.Component {
                                                                         label_name: record.label_name,
                                                                         model_name: record.name,
                                                                         model_path: record.path,
-                                                                        suggest_score: mainRecord.score,
+                                                                        suggest_score: record.suggest_score,
                                                                         defaultIp: val.defaultIp,
                                                                         ips: val.ips,
                                                                     }
@@ -1177,7 +1192,7 @@ class FreeFish extends React.Component {
                         cancelText="取消"
                     >
                         网络图像宽度:
-                        <InputNumber style={{marginTop: "5px", marginBottom: "10px", width: "100%"}} value={this.state.modelManager.publishModal.modelWidth} placeholder="留空表示训练时的默认值"
+                        <InputNumber style={{marginTop: "5px", marginBottom: "10px", width: "100%"}} value={this.state.modelManager.publishModal.modelWidth} placeholder="留空表示新建项目时保留的值"
                                      min={1}
                                      allowClear onChange={(value) => this.setState({
                             ...this.state,
@@ -1190,7 +1205,7 @@ class FreeFish extends React.Component {
                             }
                         })}/>
                         网络图像高度:
-                        <InputNumber style={{marginTop: "5px", marginBottom: "10px", width: "100%"}} value={this.state.modelManager.publishModal.modelHeight} placeholder="留空表示训练时的默认值"
+                        <InputNumber style={{marginTop: "5px", marginBottom: "10px", width: "100%"}} value={this.state.modelManager.publishModal.modelHeight} placeholder="留空表示新建项目时保留的值"
                                      min={1}
                                      allowClear onChange={(value) => this.setState({
                             ...this.state,
@@ -1425,6 +1440,25 @@ class FreeFish extends React.Component {
                                 }}/>
                         {
                             this.state.train.showAiPar && <div>
+                                检出率基数:
+                                <InputNumber style={{width: '100%'}}
+                                             placeholder={this.state.train.doTrain.recalldatum}
+                                             precision={2}
+                                             step={0.1}
+                                             onChange={(value) => {
+                                                 this.setState({
+                                                     ...this.state,
+                                                     train: {
+                                                         ...this.state.train,
+                                                         doTrain: {
+                                                             ...this.state.train.doTrain,
+                                                             recalldatum: value,
+                                                         },
+                                                     }
+                                                 }, () => {
+                                                     console.log(`ducker do train: callback ${this.state.train.doTrain.recalldatum}`);
+                                                 })
+                                             }}/>
                                 每次训练所选取的样本数:
                                 <InputNumber style={{width: '100%'}}
                                              placeholder={this.state.train.doTrain.batchSize}
@@ -1441,6 +1475,24 @@ class FreeFish extends React.Component {
                                                      }
                                                  }, () => {
                                                      console.log(`ducker do train: callback ${this.state.train.doTrain.batchSize}`);
+                                                 })
+                                             }}/>
+                                GPU训练分批批次:
+                                <InputNumber style={{width: '100%'}}
+                                             placeholder={this.state.train.doTrain.subdivisionssize}
+                                             min={0}
+                                             onChange={(value) => {
+                                                 this.setState({
+                                                     ...this.state,
+                                                     train: {
+                                                         ...this.state.train,
+                                                         doTrain: {
+                                                             ...this.state.train.doTrain,
+                                                             subdivisionssize: value,
+                                                         },
+                                                     }
+                                                 }, () => {
+                                                     console.log(`ducker do train: callback ${this.state.train.doTrain.subdivisionssize}`);
                                                  })
                                              }}/>
                                 图像宽:
@@ -1488,6 +1540,22 @@ class FreeFish extends React.Component {
                                                      doTrain: {
                                                          ...this.state.train.doTrain,
                                                          angle: value,
+                                                     },
+                                                 }
+                                             })}/>
+                                训练样本占比:
+                                <InputNumber style={{width: '100%'}}
+                                             placeholder={this.state.train.doTrain.split_ratio}
+                                             precision={2}
+                                             step={0.01}
+                                             min={0}
+                                             onChange={(value) => this.setState({
+                                                 ...this.state,
+                                                 train: {
+                                                     ...this.state.train,
+                                                     doTrain: {
+                                                         ...this.state.train.doTrain,
+                                                         split_ratio: value,
                                                      },
                                                  }
                                              })}/>
@@ -1727,6 +1795,20 @@ class FreeFish extends React.Component {
                                     <Radio value={2}>漏检训练</Radio>
                                 </Radio.Group>
                                 <br/>
+                                是否保留训练生成的临时数据:&nbsp;&nbsp;
+                                <Switch checkedChildren="保留" unCheckedChildren="删除" defaultChecked={false} onChange={(v) => {
+                                    this.setState({
+                                        ...this.state,
+                                        train: {
+                                            ...this.state.train,
+                                            doTrain: {
+                                                ...this.state.train.doTrain,
+                                                rmgeneratedata: v ? 1 : 0,
+                                            },
+                                        }
+                                    });
+                                }} />
+                                <br/>
                                 选择加载的预训练权重文件:
                                 <Select
                                     style={{width: '100%'}}
@@ -1892,116 +1974,116 @@ class FreeFish extends React.Component {
                             }}
                             visible={this.state.modelManager.secondVisible}
                         >
-                            <Collapse bordered={false} onChange={(v)=>{
-                                if (v.length === 0)return;
-                                const {dispatch} = this.props;
-                                dispatch({
-                                    type: 'service/suggest_score_get',
-                                    payload: {
-                                        project_name: encodeURI(this.state.modelManager.nowEditProjectName),
-                                    },
-                                    callback: (res) => {
-                                        this.setState({
-                                            ...this.state,
-                                            suggestScore: {
-                                                ...this.state.suggestScore,
-                                                maxDetPerdm: res.maxDetPerdm,
-                                                pixel2realLength: res.pixel2realLength,
-                                            }});
-                                    }
-                                });
-                            }}>
-                                <Collapse.Panel  header="点击重新计算推荐置信度" key="1">
-                                    <Form
-                                        layout="vertical"
-                                    >
-                                        <Form.Item label="单像素对应的物理尺寸(微米)">
-                                            <InputNumber
-                                                value={this.state.suggestScore.pixel2realLength}
-                                                onChange={(value) => {
-                                                this.setState({
-                                                    ...this.state,
-                                                    suggestScore: {
-                                                        ...this.state.suggestScore,
-                                                        pixel2realLength: value,
-                                                    }});
-                                            }} step={0.1} style={{width: "100%"}} />
-                                        </Form.Item>
-                                        <Form.Item label="每平方分米所允许的最大误报数"> {/*就是单位平方分米所允许的最大误报数*/}
-                                            <InputNumber
-                                                value={this.state.suggestScore.maxDetPerdm}
-                                                onChange={(value) => {
-                                                this.setState({
-                                                    ...this.state,
-                                                    suggestScore: {
-                                                        ...this.state.suggestScore,
-                                                        maxDetPerdm: value,
-                                                    }});
-                                            }} step={1} style={{width: "100%"}} />
-                                        </Form.Item>
-                                        <Form.Item>
-                                            <Button type="primary"
-                                                    loading={this.state.suggestScore.loading}
-                                                    onClick={()=>{
-                                                        if (this.state.suggestScore.pixel2realLength === null || this.state.suggestScore.maxDetPerdm === null) {
-                                                            message.error("值不可以为空！")
-                                                            return;
-                                                        }
-                                                        this.setState({
-                                                            ...this.state,
-                                                            suggestScore: {
-                                                                ...this.state.suggestScore,
-                                                                loading: true,
-                                                            }}, () => {
-                                                            // 开始计算啦
-                                                            const {dispatch} = this.props;
-                                                            dispatch({
-                                                                type: 'service/suggest_score_put',
-                                                                payload: {
-                                                                    project_name: encodeURI(this.state.modelManager.nowEditProjectName),
-                                                                    maxDetPerdm: this.state.suggestScore.maxDetPerdm,
-                                                                    pixel2realLength: this.state.suggestScore.pixel2realLength,
-                                                                },
-                                                                callback: (res) => {
-                                                                    if (res.res === "ok"){
-                                                                        notification.success({
-                                                                            duration: 0,
-                                                                            message: "执行完毕",
-                                                                            description: res.message,
-                                                                        });
-                                                                    } else {
-                                                                        notification.error({
-                                                                            duration: 0,
-                                                                            message: "执行出错",
-                                                                            description: res.message,
-                                                                        });
-                                                                    }
+                            {// region 暂时去掉手动计算推荐置信度
+                            }
+                            {/*<Collapse bordered={false} onChange={(v)=>{*/}
+                            {/*    if (v.length === 0)return;*/}
+                            {/*    const {dispatch} = this.props;*/}
+                            {/*    dispatch({*/}
+                            {/*        type: 'service/suggest_score_get',*/}
+                            {/*        payload: {*/}
+                            {/*            project_name: encodeURI(this.state.modelManager.nowEditProjectName),*/}
+                            {/*        },*/}
+                            {/*        callback: (res) => {*/}
+                            {/*            this.setState({*/}
+                            {/*                ...this.state,*/}
+                            {/*                suggestScore: {*/}
+                            {/*                    ...this.state.suggestScore,*/}
+                            {/*                    maxDetPerdm: res.maxDetPerdm,*/}
+                            {/*                    pixel2realLength: res.pixel2realLength,*/}
+                            {/*                }});*/}
+                            {/*        }*/}
+                            {/*    });*/}
+                            {/*}}>*/}
+                            {/*    <Collapse.Panel  header="点击重新计算推荐置信度" key="1">*/}
+                            {/*        <Form*/}
+                            {/*            layout="vertical"*/}
+                            {/*        >*/}
+                            {/*            <Form.Item label="单像素对应的物理尺寸(微米)">*/}
+                            {/*                <InputNumber*/}
+                            {/*                    value={this.state.suggestScore.pixel2realLength}*/}
+                            {/*                    onChange={(value) => {*/}
+                            {/*                    this.setState({*/}
+                            {/*                        ...this.state,*/}
+                            {/*                        suggestScore: {*/}
+                            {/*                            ...this.state.suggestScore,*/}
+                            {/*                            pixel2realLength: value,*/}
+                            {/*                        }});*/}
+                            {/*                }} step={0.1} style={{width: "100%"}} />*/}
+                            {/*            </Form.Item>*/}
+                            {/*            <Form.Item label="每平方分米所允许的最大误报数"> /!*就是单位平方分米所允许的最大误报数*!/*/}
+                            {/*                <InputNumber*/}
+                            {/*                    value={this.state.suggestScore.maxDetPerdm}*/}
+                            {/*                    onChange={(value) => {*/}
+                            {/*                    this.setState({*/}
+                            {/*                        ...this.state,*/}
+                            {/*                        suggestScore: {*/}
+                            {/*                            ...this.state.suggestScore,*/}
+                            {/*                            maxDetPerdm: value,*/}
+                            {/*                        }});*/}
+                            {/*                }} step={1} style={{width: "100%"}} />*/}
+                            {/*            </Form.Item>*/}
+                            {/*            <Form.Item>*/}
+                            {/*                <Button type="primary"*/}
+                            {/*                        loading={this.state.suggestScore.loading}*/}
+                            {/*                        onClick={()=>{*/}
+                            {/*                            if (this.state.suggestScore.pixel2realLength === null || this.state.suggestScore.maxDetPerdm === null) {*/}
+                            {/*                                message.error("值不可以为空！")*/}
+                            {/*                                return;*/}
+                            {/*                            }*/}
+                            {/*                            this.setState({*/}
+                            {/*                                ...this.state,*/}
+                            {/*                                suggestScore: {*/}
+                            {/*                                    ...this.state.suggestScore,*/}
+                            {/*                                    loading: true,*/}
+                            {/*                                }}, () => {*/}
+                            {/*                                // 开始计算啦*/}
+                            {/*                                const {dispatch} = this.props;*/}
+                            {/*                                dispatch({*/}
+                            {/*                                    type: 'service/suggest_score_put',*/}
+                            {/*                                    payload: {*/}
+                            {/*                                        project_name: encodeURI(this.state.modelManager.nowEditProjectName),*/}
+                            {/*                                        maxDetPerdm: this.state.suggestScore.maxDetPerdm,*/}
+                            {/*                                        pixel2realLength: this.state.suggestScore.pixel2realLength,*/}
+                            {/*                                    },*/}
+                            {/*                                    callback: (res) => {*/}
+                            {/*                                        if (res.res === "ok"){*/}
+                            {/*                                            notification.success({*/}
+                            {/*                                                duration: 0,*/}
+                            {/*                                                message: "执行完毕",*/}
+                            {/*                                                description: res.message,*/}
+                            {/*                                            });*/}
+                            {/*                                        } else {*/}
+                            {/*                                            notification.error({*/}
+                            {/*                                                duration: 0,*/}
+                            {/*                                                message: "执行出错",*/}
+                            {/*                                                description: res.message,*/}
+                            {/*                                            });*/}
+                            {/*                                        }*/}
 
-                                                                    this.setState({
-                                                                        ...this.state,
-                                                                        suggestScore: {
-                                                                            ...this.state.suggestScore,
-                                                                            loading: false
-                                                                        }});
-                                                                }
-                                                            });
-                                                        });
+                            {/*                                        this.setState({*/}
+                            {/*                                            ...this.state,*/}
+                            {/*                                            suggestScore: {*/}
+                            {/*                                                ...this.state.suggestScore,*/}
+                            {/*                                                loading: false*/}
+                            {/*                                            }});*/}
+                            {/*                                    }*/}
+                            {/*                                });*/}
+                            {/*                            });*/}
 
-                                            }}>开始计算</Button>
-                                        </Form.Item>
-                                    </Form>
-                                </Collapse.Panel>
-                            </Collapse>
+                            {/*                }}>开始计算</Button>*/}
+                            {/*            </Form.Item>*/}
+                            {/*        </Form>*/}
+                            {/*    </Collapse.Panel>*/}
+                            {/*</Collapse>*/}
+                            {// endregion
+                            }
                             <Table
                                 rowKey={"label_name"}
                                 columns={[{
                                     title: '标签名',
                                     key: "label_name",
                                     dataIndex: 'label_name',
-                                },{
-                                    title: '推置置信度',
-                                    key: "score",
-                                    dataIndex: 'score',
                                 }]}
                                 dataSource={labelsWithScoreByProject.labels}
                                 pagination={false}

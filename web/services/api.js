@@ -73,7 +73,7 @@ export async function getLabelsByProject(params) {
     });
 }
 export async function getLabelsWithScoreByProject(params) {
-    return request(`http://${ip}/get_labels_with_score/${params.project_name}`, {
+    return request(`http://${ip}/get_labels_with_info/${params.project_name}`, {
         method: 'GET',
     });
 }
