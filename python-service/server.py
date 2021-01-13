@@ -983,9 +983,10 @@ def get_labels_with_publish_date(project_name):
     label_file = search_path + "/labels.names"
     suggest_file = "%s/modelRelease.yaml" % search_path
     labels = []
-    with open(suggest_file, 'r', encoding='utf-8') as f:
-        result = yaml.load(f.read(), Loader=yaml.FullLoader)
-        f.close()
+    if os.path.exists(suggest_file):
+        with open(suggest_file, 'r', encoding='utf-8') as f:
+            result = yaml.load(f.read(), Loader=yaml.FullLoader)
+            f.close()
     if os.path.exists(label_file):
         lines = open(label_file, 'r')
         for line in lines:
