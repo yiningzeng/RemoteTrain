@@ -304,7 +304,7 @@ def get_train_one():
         # We have data
     else:
         # 这里需要检查训练素材包是否已经解包，如果未解包，这里需要拒绝，让它重新排队ff.channel.basic_nack
-        train_info = json.loads(body.decode('utf-8'))
+        train_info = yaml.load(body.decode('utf-8'), Loader=yaml.FullLoader)
         os.system("echo '%s' | sudo -S chmod -R 777 %s/%s/training_data" % (
             ff.root_password, ff.assets_base_path, train_info["projectName"]))
         # 判断训练状态文件是否存在
@@ -322,7 +322,10 @@ def get_train_one():
                 '\n', '')
             if "等待训练" in status:
                 channel.basic_nack(method_frame.delivery_tag)  # 告诉队列他要滚回队列去
-
+                with open('{}/{}/training_data/config.yaml'.format(ff.assets_base_path, train_info["projectName"]), 'w',
+                          encoding='utf-8') as fs:
+                    yaml.dump(data=train_info, stream=fs, allow_unicode=True)
+                    fs.close()
                 '''
                 执行后会在 -v 目录下生成 容器的id container_id.log
                 usage:  dockertrain  -p  映射到本地的端口 默认8097 如果被占用会自动分配，只检测端口占用情况，可能存在多个未开启的容器相同端口的情况
@@ -473,6 +476,13 @@ def do_train_http():
         with open('./config.yaml', 'r', encoding='utf-8') as f:
             result = yaml.load(f.read(), Loader=yaml.FullLoader)
             f.close()
+            # region 这里参数和训练队列读取后的一些配置有关
+            result["projectName"] = data["projectName"]
+            result["taskId"] = data["taskId"]
+            result['providerType'] = data['providerType']
+            result['image'] = data['image']
+            # endregion
+
             result["batchsize"] = data["batchSize"]
             result["maxiter"] = data["maxIter"]
             result["imagesize"] = [data["imageWidth"], data["imageHeight"]]
