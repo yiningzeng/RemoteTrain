@@ -495,6 +495,7 @@ def do_train_http():
             result["rmgeneratedata"] = data["rmgeneratedata"]
             result["split_ratio"] = data["split_ratio"]
             result["recalldatum"] = data["recalldatum"]
+            result["otherlabeltraintype"] = data["otherlabeltraintype"]
             with open('{}/{}/training_data/config.yaml'.format(ff.assets_base_path, data["projectName"]), 'w',
                       encoding='utf-8') as fs:
                 yaml.dump(data=result, stream=fs, allow_unicode=True)

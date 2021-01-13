@@ -40,4 +40,5 @@ subdivisionssize: 8
 sum_suggest_pro: []
 traintype: 0
 trainwithnolabelpic: 100000
+otherlabeltraintype: 1 # 0不开启 1开启， 可能存在其他类型 非当前标签图片训练方式
 recalldatum: 2
