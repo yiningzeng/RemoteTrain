@@ -619,16 +619,17 @@ def stop_train_http():
                 ff.root_password, ff.assets_base_path, data['project_name'])
             log.logger.info('停止训练:%s' % cmd)
             os.system(cmd)  # 会自动退出，所以这里不需要了
+            connection, channel, method_frame, header_frame, body = do_basic_get(queue=ff.train_queue)
+            if method_frame is not None:
+                train_info = yaml.load(body.decode('utf-8'), Loader=yaml.FullLoader)
+                if train_info['taskId'] == data["task_id"]:
+                    channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
+                    # 保险起见再写入本地状态文件
+                    os.system("echo '停止训练\c' > '%s/%s/training_data/train_status_%s.log'" % (
+                        ff.assets_base_path, data["project_name"], data["task_id"]))
             ff.postgres_execute("UPDATE train_record SET "
                                 "status=%d WHERE task_id='%s'" %
                                 (3, data['task_id']))
-            connection, channel, method_frame, header_frame, body = do_basic_get(queue=ff.train_queue)
-            train_info = json.loads(body.decode('utf-8'))
-            if train_info['taskId'] == data["taskId"]:
-                channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
-                # 保险起见再写入本地状态文件
-                os.system("echo '停止训练\c' > '%s/%s/training_data/train_status_%s.log'" % (
-                    ff.assets_base_path, data["projectName"], data["taskId"]))
     except Exception as e:
         log.logger.error(e)
         return Response(json.dumps({"res": "err"}), mimetype='application/json')
