@@ -65,8 +65,8 @@ usage:  dockertrain  -p  映射到本地的端口 默认8097 如果被占用会�
 
 class pikaqiu(object):
 
-    def __init__(self, root_password='icubic-123', host='localhost', port=5672,
-                 username='guest', password='guest', assets_base_path='/assets/Projects',
+    def __init__(self, root_password='icubic-123', rabbitmq_host='localhost', rabbitmq_port=5672,
+                 rabbitmq_username='guest', rabbitmq_password='guest', assets_base_path='/assets/Projects',
                  train_exchange='ai.train.topic', train_queue='ai.train.topic-queue', train_routing_key='train.start.#',
                  test_exchange='ai.test.topic', test_queue='ai.test.topic-queue', test_routing_key='test.start.#',
                  package_exchange='ai.package.topic', package_queue='ai.package.topic-queue',
@@ -74,10 +74,10 @@ class pikaqiu(object):
                  ):
         self.assets_base_path = assets_base_path
         self.root_password = root_password
-        self.host = host
-        self.port = port
-        self.username = username
-        self.password = password
+        self.rabbitmq_host = rabbitmq_host
+        self.rabbitmq_port = rabbitmq_port
+        self.rabbitmq_username = rabbitmq_username
+        self.rabbitmq_password = rabbitmq_password
         self.sql_host = 'localhost'
         # region 画图参数
         self.draw = True
@@ -100,7 +100,7 @@ class pikaqiu(object):
         self.package_queue = package_queue
         self.package_routing_key = package_routing_key
         # endregion
-        self.parameters = pika.URLParameters("amqp://%s:%s@%s:%d" % (username, password, host, port))
+        self.parameters = pika.URLParameters("amqp://%s:%s@%s:%d" % (rabbitmq_username, rabbitmq_password, rabbitmq_host, rabbitmq_port))
         # region postgres
         self.postgres_conn = None
         # endregion
@@ -206,7 +206,7 @@ class pikaqiu(object):
         self.draw_host = draw_host
         self.draw_port = draw_port
         self.sql_host = sql_host
-        if draw and not debug:
+        if draw:
             os.system(
                 "echo %s | sudo -S docker stop service-web-loss && sudo docker rm service-web-loss" % self.root_password)
             os.system("echo %s | sudo -S docker run \
@@ -1098,9 +1098,8 @@ def get_models():
                 one_project["list"].append(fra)
             projects.append(one_project)
     return Response(json.dumps({"res": 0, "message": "获取成功", "project_list": projects}), mimetype='application/json')
-
-
 # endregion
+
 
 class Logger(object):
     level_relations = {
@@ -1135,43 +1134,28 @@ class Logger(object):
         self.logger.addHandler(th)
 
 
-def fucking():
-    str = "echo %s | sudo -S docker ps |grep `cat %s/cece/train.dname`" % (
-        ff.root_password, ff.assets_base_path)
-    p = subprocess.Popen(str, shell=True,
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
-    p.wait()
-    res = p.stdout.read()
-    print(res)
-    if '' == res or len(res) < 10:
-        print("acvaasdsd")
-
-
 if __name__ == '__main__':
     log = Logger('server.log', when="D")
     log.logger.error("开始了")
     if not os.path.isfile("/usr/local/bin/dockertrain"):
         print("dockertrain 执行文件不存在")
         exit(99)
-    debug = False
     wechat_monitor = False
-    if debug:
-        ff = pikaqiu(root_password='scholmi1024', host='localhost', username='baymin', password='baymin1024',
-                     assets_base_path='/qtingvisionfolder/Projects')
-    else:
-        ff = pikaqiu(root_password='baymin1024', host='192.168.31.77', username='baymin', password='baymin1024',
-                     assets_base_path='/qtingvisionfolder/Projects')
-    # init(self, sql=True, sql_host='localhost', draw=True, draw_host='localhost', draw_port=8097):
-    # sql: 是否开启数据库，sql_host：数据库地址，draw：是否开启画图，draw_host：画图的服务地址，draw_port：画图的服务端口
-    ff.init(sql=True, sql_host='192.168.31.77', draw_host='localhost', draw_port=1121)
+    with open("baseConfig.yaml", 'r', encoding='utf-8') as f:
+        baseConfig = yaml.load(f.read(), Loader=yaml.FullLoader)
+        f.close()
 
+    ff = pikaqiu(root_password=baseConfig['root_password'],
+                 rabbitmq_host=baseConfig['rabbitmq_host'],
+                 rabbitmq_username=baseConfig['rabbitmq_username'],
+                 rabbitmq_password=baseConfig['rabbitmq_password'],
+                 assets_base_path='/qtingvisionfolder/Projects')
+    ff.init(sql=True, sql_host=baseConfig['sql_host'],
+            draw_host=baseConfig['draw_host'],
+            draw_port=baseConfig['draw_port'])
     # 创建后台执行的 schedulers
     scheduler = BackgroundScheduler()
     # 添加调度任务
-
-    # 提醒写日报
-    # scheduler.add_job(remind, 'cron', second="0/2")
-
     '''
     weeks(int)  间隔几周
     days(int)   间隔几天
@@ -1183,20 +1167,15 @@ if __name__ == '__main__':
     timezone(datetime.tzinfo or   str)  时区
     '''
     get_train_one()
-    if debug:
-        scheduler.add_job(get_train_one, 'interval', minutes=1)
-        # scheduler.add_job(get_test_one, 'interval', seconds=5)
-        # scheduler.add_job(fucking, 'interval', seconds=5)
-    else:
-        if wechat_monitor:
-            bot = Bot(cache_path=True, console_qr=True)
-            myself = bot.self
-            my_friend = bot.friends().search('郭永龙')[0]
-            # my_friend.send('微信监督开始')
-            bot.file_helper.send('微信监督开始')
-        scheduler.add_job(get_train_one, 'interval', minutes=1)
-        # scheduler.add_job(get_test_one, 'interval', seconds=5)
-    # scheduler.add_job(get_package_one, 'interval', seconds=5)
+    scheduler.add_job(get_train_one, 'interval', minutes=1)
+
+    if wechat_monitor:
+        bot = Bot(cache_path=True, console_qr=True)
+        myself = bot.self
+        my_friend = bot.friends().search('郭永龙')[0]
+        # my_friend.send('微信监督开始')
+        bot.file_helper.send('微信监督开始')
+
     scheduler.start()
 
     log.logger.info("start")

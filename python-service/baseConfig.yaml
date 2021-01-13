@@ -1,0 +1,7 @@
+root_password: baymin1024
+rabbitmq_host: 192.168.31.77
+rabbitmq_username: baymin
+rabbitmq_password: baymin1024
+sql_host: 192.168.31.77
+draw_host: 192.168.31.77
+draw_port: 1121
