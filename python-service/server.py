@@ -1113,6 +1113,8 @@ class Logger(object):
 
     def __init__(self, filename, level='info', when='D', backCount=30,
                  fmt='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s'):
+        filename = "log/" + filename
+        os.system("mkdir log")
         self.logger = logging.getLogger(filename)
         format_str = logging.Formatter(fmt)  # 设置日志格式
         self.logger.setLevel(self.level_relations.get(level))  # 设置日志级别
