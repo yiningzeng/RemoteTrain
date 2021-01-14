@@ -28,3 +28,7 @@ python-service/wxpy\.pkl
 python-service/server.log.2020-12-29
 
 python-service/ip
+
+*.txt
+
+python-service/log/

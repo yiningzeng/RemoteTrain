@@ -18,7 +18,7 @@ imagesize:
 - 512
 labelsfilename: ''
 lablelist: []
-maxiter: 100
+maxiter: 120000
 modeldcfgname: yolov4-tiny-3l.cfg
 modelname: '20081209'
 path_prefix: data/images/

@@ -124,6 +124,7 @@ class FreeFish extends React.Component {
                 rmgeneratedata: 0, // 是否保留训练生成的临时数据
                 split_ratio: 0.95, // 训练样本占比
                 recalldatum: 2, // 检出率基准
+                otherlabeltraintype: 1, // 非当前标签图片训练方式
             },
         },
         suggestScore: {
@@ -148,6 +149,7 @@ class FreeFish extends React.Component {
             weights: undefined,
         },
         modelManager: {
+            loadingProjects: false,
             expandedRowKeys: undefined,
             nowEditProjectName: undefined,
             loadingModels: true,
@@ -1274,6 +1276,7 @@ class FreeFish extends React.Component {
                     </Drawer>
 
                     <Drawer
+                        destroyOnClose={true}
                         title="新增训练任务"
                         placement="right"
                         width="40%"
@@ -1419,6 +1422,9 @@ class FreeFish extends React.Component {
                                        })
                                    }}/>
                         </InputGroup>
+
+                        {// region 专业人员操作
+                        }
                         AI参数(选填)-专业人员操作:&nbsp;&nbsp;
                         <Switch checkedChildren="已打开调参" unCheckedChildren="已关闭调参"
                                 onChange={(c) => {
@@ -1446,6 +1452,7 @@ class FreeFish extends React.Component {
                                              precision={2}
                                              step={0.1}
                                              onChange={(value) => {
+                                                 if (value === "" || value === null || value === undefined) value = 2;
                                                  this.setState({
                                                      ...this.state,
                                                      train: {
@@ -1459,11 +1466,31 @@ class FreeFish extends React.Component {
                                                      console.log(`ducker do train: callback ${this.state.train.doTrain.recalldatum}`);
                                                  })
                                              }}/>
+                                非当前标签图片训练方式:
+                                <InputNumber style={{width: '100%'}}
+                                             placeholder={this.state.train.doTrain.otherlabeltraintype}
+                                             precision={0}
+                                             step={1}
+                                             min={0}
+                                             onChange={(value) => {
+                                                 if (value === "" || value === null || value === undefined) value = 1;
+                                                 this.setState({
+                                                     ...this.state,
+                                                     train: {
+                                                         ...this.state.train,
+                                                         doTrain: {
+                                                             ...this.state.train.doTrain,
+                                                             otherlabeltraintype: value,
+                                                         },
+                                                     }
+                                                 })
+                                             }}/>
                                 每次训练所选取的样本数:
                                 <InputNumber style={{width: '100%'}}
                                              placeholder={this.state.train.doTrain.batchSize}
                                              min={0}
                                              onChange={(value) => {
+                                                 if (value === "" || value === null || value === undefined) value = 64;
                                                  this.setState({
                                                      ...this.state,
                                                      train: {
@@ -1482,6 +1509,7 @@ class FreeFish extends React.Component {
                                              placeholder={this.state.train.doTrain.subdivisionssize}
                                              min={0}
                                              onChange={(value) => {
+                                                 if (value === "" || value === null || value === undefined) value = 16;
                                                  this.setState({
                                                      ...this.state,
                                                      train: {
@@ -1501,119 +1529,142 @@ class FreeFish extends React.Component {
                                              precision={0}
                                              step={1}
                                              min={0}
-                                             onChange={(value) => this.setState({
-                                                 ...this.state,
-                                                 train: {
-                                                     ...this.state.train,
-                                                     doTrain: {
-                                                         ...this.state.train.doTrain,
-                                                         imageWidth: value,
-                                                     },
-                                                 }
-                                             })}/>
+                                             onChange={(value) => {
+                                                 if (value === "" || value === null || value === undefined) value = 512;
+                                                 this.setState({
+                                                     ...this.state,
+                                                     train: {
+                                                         ...this.state.train,
+                                                         doTrain: {
+                                                             ...this.state.train.doTrain,
+                                                             imageWidth: value,
+                                                         },
+                                                     }
+                                                 })
+                                             }}/>
                                 图像高:
                                 <InputNumber style={{width: '100%'}}
                                              placeholder={this.state.train.doTrain.imageHeight}
                                              precision={0}
                                              step={1}
                                              min={0}
-                                             onChange={(value) => this.setState({
-                                                 ...this.state,
-                                                 train: {
-                                                     ...this.state.train,
-                                                     doTrain: {
-                                                         ...this.state.train.doTrain,
-                                                         imageHeight: value,
-                                                     },
-                                                 }
-                                             })}/>
+                                             onChange={(value) => {
+                                                 if (value === "" || value === null || value === undefined) value = 512;
+                                                 this.setState({
+                                                     ...this.state,
+                                                     train: {
+                                                         ...this.state.train,
+                                                         doTrain: {
+                                                             ...this.state.train.doTrain,
+                                                             imageHeight: value,
+                                                         },
+                                                     }
+                                                 })
+                                             }}/>
                                 图像随机旋转角度范围:
                                 <InputNumber style={{width: '100%'}}
                                              placeholder={this.state.train.doTrain.angle}
                                              precision={0}
                                              step={1}
                                              min={0}
-                                             onChange={(value) => this.setState({
-                                                 ...this.state,
-                                                 train: {
-                                                     ...this.state.train,
-                                                     doTrain: {
-                                                         ...this.state.train.doTrain,
-                                                         angle: value,
-                                                     },
-                                                 }
-                                             })}/>
+                                             onChange={(value) => {
+                                                 if (value === "" || value === null || value === undefined) value = 360;
+                                                 this.setState({
+                                                     ...this.state,
+                                                     train: {
+                                                         ...this.state.train,
+                                                         doTrain: {
+                                                             ...this.state.train.doTrain,
+                                                             angle: value,
+                                                         },
+                                                     }
+                                                 })
+                                             }}/>
                                 训练样本占比:
                                 <InputNumber style={{width: '100%'}}
                                              placeholder={this.state.train.doTrain.split_ratio}
                                              precision={2}
                                              step={0.01}
                                              min={0}
-                                             onChange={(value) => this.setState({
-                                                 ...this.state,
-                                                 train: {
-                                                     ...this.state.train,
-                                                     doTrain: {
-                                                         ...this.state.train.doTrain,
-                                                         split_ratio: value,
-                                                     },
-                                                 }
-                                             })}/>
+                                             onChange={(value) => {
+                                                 if (value === "" || value === null || value === undefined) value = 0.95;
+                                                 this.setState({
+                                                     ...this.state,
+                                                     train: {
+                                                         ...this.state.train,
+                                                         doTrain: {
+                                                             ...this.state.train.doTrain,
+                                                             split_ratio: value,
+                                                         },
+                                                     }
+                                                 })
+                                             }}/>
                                 训练最大轮数:
                                 <InputNumber style={{width: '100%'}}
                                              placeholder={this.state.train.doTrain.maxIter}
                                              precision={0}
                                              step={1}
                                              min={0}
-                                             onChange={(value) => this.setState({
-                                                 ...this.state,
-                                                 train: {
-                                                     ...this.state.train,
-                                                     doTrain: {
-                                                         ...this.state.train.doTrain,
-                                                         maxIter: value,
-                                                     },
-                                                 }
-                                             })}/>
+                                             onChange={(value) => {
+                                                 if (value === "" || value === null || value === undefined) value = 120000;
+                                                 this.setState({
+                                                     ...this.state,
+                                                     train: {
+                                                         ...this.state.train,
+                                                         doTrain: {
+                                                             ...this.state.train.doTrain,
+                                                             maxIter: value,
+                                                         },
+                                                     }
+                                                 })
+                                             }}/>
                                 最大负样本数:
                                 <InputNumber style={{width: '100%'}}
                                              placeholder={this.state.train.doTrain.trainwithnolabelpic}
                                              precision={0}
                                              step={1}
                                              min={0}
-                                             onChange={(value) => this.setState({
-                                                 ...this.state,
-                                                 train: {
-                                                     ...this.state.train,
-                                                     doTrain: {
-                                                         ...this.state.train.doTrain,
-                                                         trainwithnolabelpic: value,
-                                                     },
-                                                 }
-                                             })}/>
+                                             onChange={(value) => {
+                                                 if (value === "" || value === null || value === undefined) value = 1000;
+                                                 this.setState({
+                                                     ...this.state,
+                                                     train: {
+                                                         ...this.state.train,
+                                                         doTrain: {
+                                                             ...this.state.train.doTrain,
+                                                             trainwithnolabelpic: value,
+                                                         },
+                                                     }
+                                                 })
+                                             }}/>
                                 平移步长:
                                 <InputNumber style={{width: '100%'}}
                                              placeholder={this.state.train.doTrain.cell_stride}
                                              precision={0}
                                              step={1}
                                              min={0}
-                                             onChange={(value) => this.setState({
-                                                 ...this.state,
-                                                 train: {
-                                                     ...this.state.train,
-                                                     doTrain: {
-                                                         ...this.state.train.doTrain,
-                                                         cell_stride: value,
-                                                     },
-                                                 }
-                                             })}/>
+                                             onChange={(value) => {
+                                                 if (value === "" || value === null || value === undefined) value = 1;
+                                                 this.setState({
+                                                     ...this.state,
+                                                     train: {
+                                                         ...this.state.train,
+                                                         doTrain: {
+                                                             ...this.state.train.doTrain,
+                                                             cell_stride: value,
+                                                         },
+                                                     }
+                                                 })
+                                             }}/>
                                 平移框大小:
                                 <InputNumber style={{width: '100%'}}
                                              placeholder={this.state.train.doTrain.cellsize}
                                              precision={0}
                                              step={1}
                                              min={0}
-                                             onChange={(value) => this.setState({
+                                             onChange={(value) => {
+                                                 if (value === "" || value === null || value === undefined) value = 16;
+                                                 this.setState({
                                                  ...this.state,
                                                  train: {
                                                      ...this.state.train,
@@ -1622,7 +1673,7 @@ class FreeFish extends React.Component {
                                                          cellsize: value,
                                                      },
                                                  }
-                                             })}/>
+                                             })}}/>
 
 
                                 扩展尺寸:
@@ -1632,16 +1683,19 @@ class FreeFish extends React.Component {
                                                  precision={0}
                                                  step={1}
                                                  min={0}
-                                                 onChange={(value) => this.setState({
-                                                     ...this.state,
-                                                     train: {
-                                                         ...this.state.train,
-                                                         doTrain: {
-                                                             ...this.state.train.doTrain,
-                                                             expand_size: [value, this.state.train.doTrain.expand_size[1]],
-                                                         },
-                                                     }
-                                                 })}/>
+                                                 onChange={(value) => {
+                                                     if (value === "" || value === null || value === undefined) value = 8;
+                                                     this.setState({
+                                                         ...this.state,
+                                                         train: {
+                                                             ...this.state.train,
+                                                             doTrain: {
+                                                                 ...this.state.train.doTrain,
+                                                                 expand_size: [value, this.state.train.doTrain.expand_size[1]],
+                                                             },
+                                                         }
+                                                     })
+                                                 }}/>
                                     <Input
                                         className="site-input-split"
                                         style={{
@@ -1659,16 +1713,19 @@ class FreeFish extends React.Component {
                                                  precision={0}
                                                  step={1}
                                                  min={0}
-                                                 onChange={(value) => this.setState({
-                                                     ...this.state,
-                                                     train: {
-                                                         ...this.state.train,
-                                                         doTrain: {
-                                                             ...this.state.train.doTrain,
-                                                             expand_size: [this.state.train.doTrain.expand_size[0], value],
-                                                         },
-                                                     }
-                                                 })}/>
+                                                 onChange={(value) => {
+                                                     if (value === "" || value === null || value === undefined) value = 8;
+                                                     this.setState({
+                                                         ...this.state,
+                                                         train: {
+                                                             ...this.state.train,
+                                                             doTrain: {
+                                                                 ...this.state.train.doTrain,
+                                                                 expand_size: [this.state.train.doTrain.expand_size[0], value],
+                                                             },
+                                                         }
+                                                     })
+                                                 }}/>
                                 </Input.Group>
 
 
@@ -1679,16 +1736,19 @@ class FreeFish extends React.Component {
                                                  precision={0}
                                                  step={1}
                                                  min={0}
-                                                 onChange={(value) => this.setState({
-                                                     ...this.state,
-                                                     train: {
-                                                         ...this.state.train,
-                                                         doTrain: {
-                                                             ...this.state.train.doTrain,
-                                                             ignore_size: [value, this.state.train.doTrain.ignore_size[1]],
-                                                         },
-                                                     }
-                                                 })}/>
+                                                 onChange={(value) => {
+                                                     if (value === "" || value === null || value === undefined) value = 6;
+                                                     this.setState({
+                                                         ...this.state,
+                                                         train: {
+                                                             ...this.state.train,
+                                                             doTrain: {
+                                                                 ...this.state.train.doTrain,
+                                                                 ignore_size: [value, this.state.train.doTrain.ignore_size[1]],
+                                                             },
+                                                         }
+                                                     })
+                                                 }}/>
                                     <Input
                                         className="site-input-split"
                                         style={{
@@ -1706,16 +1766,19 @@ class FreeFish extends React.Component {
                                                  precision={0}
                                                  step={1}
                                                  min={0}
-                                                 onChange={(value) => this.setState({
-                                                     ...this.state,
-                                                     train: {
-                                                         ...this.state.train,
-                                                         doTrain: {
-                                                             ...this.state.train.doTrain,
-                                                             ignore_size: [this.state.train.doTrain.ignore_size[0], value],
-                                                         },
-                                                     }
-                                                 })}/>
+                                                 onChange={(value) => {
+                                                     if (value === "" || value === null || value === undefined) value = 6;
+                                                     this.setState({
+                                                         ...this.state,
+                                                         train: {
+                                                             ...this.state.train,
+                                                             doTrain: {
+                                                                 ...this.state.train.doTrain,
+                                                                 ignore_size: [this.state.train.doTrain.ignore_size[0], value],
+                                                             },
+                                                         }
+                                                     })
+                                                 }}/>
                                 </Input.Group>
 
                                 Anchor调整变化幅度:
@@ -1725,16 +1788,19 @@ class FreeFish extends React.Component {
                                                  precision={2}
                                                  step={0.01}
                                                  min={0}
-                                                 onChange={(value) => this.setState({
-                                                     ...this.state,
-                                                     train: {
-                                                         ...this.state.train,
-                                                         doTrain: {
-                                                             ...this.state.train.doTrain,
-                                                             resizearrange: [value, this.state.train.doTrain.resizearrange[1]],
-                                                         },
-                                                     }
-                                                 })}/>
+                                                 onChange={(value) => {
+                                                     if (value === "" || value === null || value === undefined) value = 0.3;
+                                                     this.setState({
+                                                         ...this.state,
+                                                         train: {
+                                                             ...this.state.train,
+                                                             doTrain: {
+                                                                 ...this.state.train.doTrain,
+                                                                 resizearrange: [value, this.state.train.doTrain.resizearrange[1]],
+                                                             },
+                                                         }
+                                                     })
+                                                 }}/>
                                     <Input
                                         className="site-input-split"
                                         style={{
@@ -1752,44 +1818,55 @@ class FreeFish extends React.Component {
                                                  precision={2}
                                                  step={0.01}
                                                  min={0}
-                                                 onChange={(value) => this.setState({
-                                                     ...this.state,
-                                                     train: {
-                                                         ...this.state.train,
-                                                         doTrain: {
-                                                             ...this.state.train.doTrain,
-                                                             resizearrange: [this.state.train.doTrain.resizearrange[0], value],
-                                                         },
-                                                     }
-                                                 })}/>
+                                                 onChange={(value) => {
+                                                     if (value === "" || value === null || value === undefined) value = 1.6;
+                                                     this.setState({
+                                                         ...this.state,
+                                                         train: {
+                                                             ...this.state.train,
+                                                             doTrain: {
+                                                                 ...this.state.train.doTrain,
+                                                                 resizearrange: [this.state.train.doTrain.resizearrange[0], value],
+                                                             },
+                                                         }
+                                                     })
+                                                 }}/>
                                 </Input.Group>
 
 
                                 使用的GPU:
                                 <Input style={{width: '100%'}}
                                        placeholder={this.state.train.doTrain.gpus}
-                                       onChange={(e) => this.setState({
-                                           ...this.state,
-                                           train: {
-                                               ...this.state.train,
-                                               doTrain: {
-                                                   ...this.state.train.doTrain,
-                                                   gpus: e.target.value,
-                                               },
-                                           }
-                                       })}/>
+                                       onChange={(e) => {
+                                           let value = e.target.value;
+                                           if (value === "" || value === null || value === undefined) value = "0,1";
+                                           this.setState({
+                                               ...this.state,
+                                               train: {
+                                                   ...this.state.train,
+                                                   doTrain: {
+                                                       ...this.state.train.doTrain,
+                                                       gpus: value,
+                                                   },
+                                               }
+                                           })
+                                       }}/>
                                 训练类型:&nbsp;&nbsp;
                                 <Radio.Group defaultValue={this.state.train.doTrain.trianType}
-                                             onChange={(e) => this.setState({
-                                                 ...this.state,
-                                                 train: {
-                                                     ...this.state.train,
-                                                     doTrain: {
-                                                         ...this.state.train.doTrain,
-                                                         trianType: e.target.value,
-                                                     },
-                                                 }
-                                             })}>
+                                             onChange={(e) => {
+                                                 let value = e.target.value;
+                                                 if (value === "" || value === null || value === undefined) value = 0;
+                                                 this.setState({
+                                                     ...this.state,
+                                                     train: {
+                                                         ...this.state.train,
+                                                         doTrain: {
+                                                             ...this.state.train.doTrain,
+                                                             trianType: value,
+                                                         },
+                                                     }
+                                                 })
+                                             }}>
                                     <Radio value={0}>从头训练</Radio>
                                     <Radio value={1}>对应自训练</Radio>
                                     <Radio value={2}>漏检训练</Radio>
@@ -1833,6 +1910,8 @@ class FreeFish extends React.Component {
                                 <br/>
                                 <br/>
                             </div>
+                        }
+                        {// endregion 专业人员操作
                         }
                         <div
                             style={{
@@ -1911,6 +1990,7 @@ class FreeFish extends React.Component {
                     </Drawer>
 
                     <Drawer
+                        destroyOnClose={true}
                         title="项目列表"
                         width="50%"
                         maskClosable={true}
@@ -1946,12 +2026,29 @@ class FreeFish extends React.Component {
                                                 nowEditProjectName: text,
                                             },
                                         }, () => {
-                                            const {dispatch} = this.props;
-                                            dispatch({
-                                                type: 'service/getLabelsWithScoreByProject',
-                                                payload: {
-                                                    project_name: encodeURI(text)
-                                                }
+                                            this.setState({
+                                               ...this.state,
+                                               modelManager: {
+                                                   ...this.state.modelManager,
+                                                   loadingProjects: true,
+                                               },
+                                            }, () => {
+                                                const {dispatch} = this.props;
+                                                dispatch({
+                                                    type: 'service/getLabelsWithScoreByProject',
+                                                    payload: {
+                                                        project_name: encodeURI(text)
+                                                    },
+                                                    callback: (v) => {
+                                                        this.setState({
+                                                            ...this.state,
+                                                            modelManager: {
+                                                                ...this.state.modelManager,
+                                                                loadingProjects: false,
+                                                            },
+                                                        });
+                                                    }
+                                                });
                                             });
                                         });
                                     }}>模型管理</a>
@@ -1959,7 +2056,7 @@ class FreeFish extends React.Component {
                                 ),
                             }]} dataSource={localPathList.path_list}/>
                         <Drawer
-                            destroyOnClose
+                            destroyOnClose={true}
                             title={`${this.state.modelManager.nowEditProjectName}-模型列表`}
                             width="50%"
                             maskClosable={true}
@@ -2078,6 +2175,7 @@ class FreeFish extends React.Component {
                             {/*</Collapse>*/}
                             {// endregion
                             }
+                            <Spin spinning={this.state.modelManager.loadingProjects}>
                             <Table
                                 rowKey={"label_name"}
                                 columns={[{
@@ -2085,7 +2183,7 @@ class FreeFish extends React.Component {
                                     key: "label_name",
                                     dataIndex: 'label_name',
                                 }]}
-                                dataSource={labelsWithScoreByProject.labels}
+                            dataSource={labelsWithScoreByProject.labels}
                                 pagination={false}
                                 expandable={{
                                     expandedRowKeys: this.state.modelManager.expandedRowKeys,
@@ -2133,6 +2231,7 @@ class FreeFish extends React.Component {
                                     }
                                 }}
                             />
+                            </Spin>
                         </Drawer>
                     </Drawer>
                     {/*<div className="content padding">{content}</div>*/}

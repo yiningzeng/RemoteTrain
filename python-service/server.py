@@ -869,39 +869,43 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
         fs.close()
     fuPath = basePath + "/model_release/yolov4-tiny-3l"
     modelReleasePath = fuPath + "/" + label_name
-    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, modelReleasePath))  #
-    os.system("echo %s | sudo -S mkdir -p %s" % (ff.root_password, modelReleasePath))  #
+    os.system("echo %s | sudo -S rm -r '%s'" % (ff.root_password, modelReleasePath))  # 删除发布的文件夹
+    os.system("echo %s | sudo -S rm '%s.zip'" % (ff.root_password, modelReleasePath))  # 删除发布的zip文件
+
+    os.system("echo %s | sudo -S mkdir -p '%s'" % (ff.root_password, modelReleasePath))  #
+    os.system("echo %s | sudo -S chmod -R 777 '%s'" % (ff.root_password, modelReleasePath))  #
+
 
     # 复制模型文件到发布目录
-    os.system("echo %s | sudo -S cp -rf %s %s" % (
-        ff.root_password, model_path, modelReleasePath + "/" + label_name + ".weights"))  #
+    os.system("cp -rf '%s' '%s'" % (
+        model_path, modelReleasePath + "/" + label_name + ".weights"))  #
     # 写入发布信息文件到发布目录
-    os.system("echo %s | sudo -S echo '训练任务名称: %s\n模型发布日期: %s' > %s" % (
-        ff.root_password, taskName, releaseDate, modelReleasePath + "/model_info.txt"))  #
+    str = "tee '%s/model_info.txt' <<-'EOF'\n" \
+          "训练任务名称: %s\n" \
+          "模型发布日期: %s\n" \
+          "EOF" % (modelReleasePath, taskName, releaseDate)
+    print(str)
+    os.system(str)  #
     # 复制配置文件到发布目录
-    os.system("echo %s | sudo -S cp -rf %s %s" % (
-        ff.root_password, model_path.replace(".weights", ".cfg"), modelReleasePath + "/" + label_name + ".cfg"))  #
+    os.system("cp -rf '%s' '%s'" % (model_path.replace(".weights", ".cfg"), modelReleasePath + "/" + label_name + ".cfg"))  #
     # 复制推荐置信度文件到发布目录
-    os.system("echo %s | sudo -S cp -rf %s %s" % (
-        ff.root_password, model_path.replace(".weights", ".suggest"), modelReleasePath + "/suggest_score.txt"))  #
+    os.system("cp -rf '%s' '%s'" % (model_path.replace(".weights", ".suggest"), modelReleasePath + "/suggest_score.txt"))  #
     # 写入labels.names到发布目录
-    os.system(
-        "echo %s | sudo -S echo '%s' > %s" % (ff.root_password, label_name, modelReleasePath + "/labels.names"))  #
+    os.system("echo '%s' > '%s'" % (label_name, modelReleasePath + "/labels.names"))  #
     # 复制backup里的labels.names到发布目录
-    os.system("echo %s | sudo -S cp -rf %s %s" % (
-        ff.root_password, search_path + "/labels.names", fuPath + "/labels.names"))  #
+    os.system("cp -rf '%s' '%s'" % (search_path + "/labels.names", fuPath + "/labels.names"))  #
 
     # 替换网络尺寸
     try:
         if width is not None:
-            os.system("echo %s | sudo -S sed -i 's/^width.*=/width=%d #/' %s" %
-                      (ff.root_password, width, modelReleasePath + "/" + label_name + ".cfg"))  #
+            os.system("sed -i 's/^width.*=/width=%d #/' '%s'" %
+                      (width, modelReleasePath + "/" + label_name + ".cfg"))  #
         if height is not None:
-            os.system("echo %s | sudo -S sed -i 's/^height.*=/height=%d #/' %s" %
-                      (ff.root_password, height, modelReleasePath + "/" + label_name + ".cfg"))  #
+            os.system("sed -i 's/^height.*=/height=%d #/' '%s'" %
+                      (height, modelReleasePath + "/" + label_name + ".cfg"))  #
     except:
         log.logger.error("err change project size")
-    os.system("echo %s | sudo -S zip -jq %s %s/*" % (ff.root_password, modelReleasePath + ".zip", modelReleasePath))  #
+    os.system("zip -jq %s %s/*" % (modelReleasePath + ".zip", modelReleasePath))  #
 
 
 @app.route('/get_model_size', methods=['GET'])
