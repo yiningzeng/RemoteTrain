@@ -291,8 +291,10 @@ def get_train_one():
     else:
         # 这里需要检查训练素材包是否已经解包，如果未解包，这里需要拒绝，让它重新排队ff.channel.basic_nack
         train_info = yaml.load(body.decode('utf-8'), Loader=yaml.FullLoader)
-        os.system("echo '%s' | sudo -S chmod -R 777 %s/%s/training_data" % (
-            ff.root_password, ff.assets_base_path, train_info["projectName"]))
+        # 暂时去掉这句！否则数据越多新增训练卡的很
+        # os.system("echo '%s' | sudo -S chmod -R 777 %s/%s/training_data" % (
+        #     ff.root_password, ff.assets_base_path, train_info["projectName"]))
+
         # 判断训练状态文件是否存在
         if not os.path.exists("%s/%s/training_data/train_status_%s.log" % (
                 ff.assets_base_path, train_info["projectName"], train_info["taskId"])):
@@ -422,8 +424,8 @@ def get_train_one():
                 channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
                 # region 更新数据库
                 ff.postgres_execute(sql)
-                os.system("echo %s | sudo -S chmod -R 777 %s/%s" % (
-                    ff.root_password, ff.assets_base_path, train_info["projectName"]))
+                # os.system("echo %s | sudo -S chmod -R 777 %s/%s" % (
+                #     ff.root_password, ff.assets_base_path, train_info["projectName"]))
                 notify_message = "训练完成"
             elif "停止训练" in status:
                 sql = "UPDATE train_record SET status=%d where task_id='%s'" % (3, train_info['taskId'])
@@ -454,10 +456,10 @@ def do_train_http():
             modeldcfgname = net_framework.yolov4Tiny3l["modeldcfgname"]
         pretraincfgname = "" if data["pretrainWeight"] == "" else data["pretrainWeight"].split("_")[0] + ".cfg"
 
-        os.system("echo %s | sudo -S mkdir -p %s/%s/training_data" % (
-            ff.root_password, ff.assets_base_path, data["projectName"]))
-        os.system("echo %s | sudo -S chmod -R 777 %s/%s/training_data" % (
-            ff.root_password, ff.assets_base_path, data["projectName"]))
+        # os.system("echo %s | sudo -S mkdir -p %s/%s/training_data" % (
+        #     ff.root_password, ff.assets_base_path, data["projectName"]))
+        # os.system("echo %s | sudo -S chmod -R 777 %s/%s/training_data" % (
+        #     ff.root_password, ff.assets_base_path, data["projectName"]))
         # region 写入配置文件
         with open('./config.yaml', 'r', encoding='utf-8') as f:
             result = yaml.load(f.read(), Loader=yaml.FullLoader)
@@ -815,7 +817,6 @@ def delete_model():
     os.system("echo %s | sudo -S rm %s" % (ff.root_password, p))
     basePath, name = os.path.split(p)
     fname, fename = os.path.splitext(name)  # 文件名和后缀
-    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
     os.system("echo %s | sudo -S rm %s/%s.*" % (ff.root_password, basePath, fname))
     return Response(json.dumps({"res": "ok", "message": "成功"}), mimetype='application/json')
 
@@ -830,8 +831,8 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
         taskName = rows[0][0]
 
     basePath = ff.assets_base_path + "/" + project_name
-    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
     search_path = basePath + "/backup"
+    os.system("echo %s | sudo -S chmod 777 %s/%s.*" % (ff.root_password, search_path, fname))
 
     # 首先查看是否存在已经发布的版本文件
     result = {}
@@ -892,7 +893,7 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
                       (height, modelReleasePath + "/" + label_name + ".cfg"))  #
     except:
         log.logger.error("err change project size")
-    os.system("zip -jq %s %s/*" % (modelReleasePath + ".zip", modelReleasePath))  #
+    os.system("echo %s | sudo -S zip -jq %s %s/*" % (ff.root_password, modelReleasePath + ".zip", modelReleasePath))  #
 
 
 @app.route('/get_model_size', methods=['GET'])
@@ -945,8 +946,8 @@ def online_model():
 @app.route('/get_labels/<project_name>', methods=['GET'])
 def get_labels(project_name):
     basePath = ff.assets_base_path + "/" + project_name
-    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))  # 重命名模型文件
     label_file = basePath + "/backup/labels.names"
+    os.system("echo %s | sudo -S chmod 777 %s" % (ff.root_password, label_file))  # 重命名模型文件
     labels = []
     if os.path.exists(label_file):
         lines = open(label_file, 'r')
@@ -969,9 +970,9 @@ def get_labels(project_name):
 @app.route('/get_labels_with_info/<project_name>', methods=['GET'])
 def get_labels_with_publish_date(project_name):
     basePath = ff.assets_base_path + "/" + project_name
-    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
     search_path = basePath + "/backup"
     label_file = search_path + "/labels.names"
+    os.system("echo %s | sudo -S chmod 777 %s" % (ff.root_password, label_file))
     suggest_file = "%s/modelRelease.yaml" % search_path
     labels = []
     result = None
@@ -1008,11 +1009,11 @@ def get_labels_with_publish_date(project_name):
 def get_project_label_models(project_name, label_name):
     models = []
     basePath = ff.assets_base_path + "/" + project_name
-    os.system("echo '%s' | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
     search_path = basePath + "/backup"
     # framework_type = "yolov3"
     # 先获取当前发布的模型
     model_file = "%s/modelRelease.yaml" % search_path
+    os.system("echo '%s' | sudo -S chmod 777 %s" % (ff.root_password, model_file))
     now_model = ""
     if os.path.exists(model_file):
         with open(model_file, 'r', encoding='utf-8') as f:
