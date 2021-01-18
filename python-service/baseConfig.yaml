@@ -1,7 +1,7 @@
 root_password: baymin1024
-rabbitmq_host: 192.168.31.77
+rabbitmq_host: localhost
 rabbitmq_username: baymin
 rabbitmq_password: baymin1024
-sql_host: 192.168.31.77
-draw_host: 192.168.31.77
+sql_host: localhost
+draw_host: localhost
 draw_port: 1121
