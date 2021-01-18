@@ -598,6 +598,15 @@ def get_train_list_http():
         return Response(json.dumps(ret_json), mimetype='application/json')
 
 
+@app.route('/train_list', methods=['DELETE'])
+def delete_train_list_http():
+    task_id = unquote(request.args.get('task_id'))
+    sql = "DELETE FROM train_record WHERE task_id = '%s'" % task_id
+    log.logger.error("删除:" + sql)
+    ff.postgres_execute(sql)
+    return Response(json.dumps({"res": "ok"}), mimetype='application/json')
+
+
 @app.route('/stop_train', methods=['POST'])  # 此处提交的参数projectId改为taskId
 def stop_train_http():
     try:

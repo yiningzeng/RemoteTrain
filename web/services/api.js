@@ -9,6 +9,11 @@ export async function getList(params) {
         method: 'GET',
     });
 }
+export async function del_record(params) {
+    return request(`http://${ip}/train_list?${stringify(params)}`, {
+        method: 'DELETE',
+    });
+}
 export async function doTrain(params) {
     console.log("getList"+JSON.stringify(params));
     return request(`http://${ip}/train`, {

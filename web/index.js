@@ -38,7 +38,7 @@ import 'moment/locale/zh-cn';
 import { getList, getModelList, getValPathList, getVocPathList, doTrain,
     startTest, stopTrain, continueTrainTrain, getLocalPathList, getModelListV2,
     getModelByProject, get_release_models_history, del_model, online_model, offline_model,
-    getLabelsByProject, getLabelsWithScoreByProject, suggest_score_get, suggest_score_put, get_model_size } from './services/api';
+    getLabelsByProject, getLabelsWithScoreByProject, suggest_score_get, suggest_score_put, get_model_size, del_record } from './services/api';
 const { Title, Paragraph, Text } = Typography;
 const { Option } = Select;
 const InputGroup = Input.Group;
@@ -445,6 +445,27 @@ class FreeFish extends React.Component {
                                 lossImgPreviewVisible: true,
                             })
                         }}>预览图表</Button>
+                        <Popconfirm
+                            disabled={record.status === 2 || record.status === 0 || record.status === 1}
+                            title="只是删除记录，该记录训练的模型不会被删除，确定要删除么？"
+                            onConfirm={() => {
+                                const {dispatch} = this.props;
+                                dispatch({
+                                    type: 'service/delRecord',
+                                    payload: {
+                                        task_id: encodeURI(record.task_id)
+                                    },
+                                    callback: (aa) => {
+                                        message.success("删除成功");
+                                        location.reload();
+                                    }
+                                });
+                            }}
+                            okText="确定"
+                            cancelText="取消"
+                        >
+                            <Button type="primary" disabled={record.status === 2 || record.status === 0 || record.status === 1} danger size="small" style={{marginLeft: 10}} >删除该记录</Button>
+                        </Popconfirm>
                         {/*<Button type="primary" size="small" style={{marginLeft: 10}}>日志</Button>*/}
                     </Row>
                     <Row>
@@ -2448,6 +2469,14 @@ app.model({
         },
         *delModel({ payload,callback}, { call, put }) {
             const response = yield call(del_model,payload);
+            yield put({
+                type: 'del_model_res',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
+        *delRecord({ payload,callback}, { call, put }) {
+            const response = yield call(del_record,payload);
             yield put({
                 type: 'del_model_res',
                 payload: response,
