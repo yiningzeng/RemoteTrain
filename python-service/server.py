@@ -100,7 +100,8 @@ class pikaqiu(object):
         self.package_queue = package_queue
         self.package_routing_key = package_routing_key
         # endregion
-        self.parameters = pika.URLParameters("amqp://%s:%s@%s:%d" % (rabbitmq_username, rabbitmq_password, rabbitmq_host, rabbitmq_port))
+        self.parameters = pika.URLParameters(
+            "amqp://%s:%s@%s:%d" % (rabbitmq_username, rabbitmq_password, rabbitmq_host, rabbitmq_port))
         # region postgres
         self.postgres_conn = None
         # endregion
@@ -223,38 +224,23 @@ class pikaqiu(object):
         channel = connection.channel()
         try:
             # region创建训练队列
-            channel.exchange_declare(self.train_exchange, "topic", passive=True, durable=True)
-            channel.queue_declare(self.train_queue, passive=True, durable=True)
+            channel.exchange_declare(self.train_exchange, "topic", durable=True)
+            channel.queue_declare(self.train_queue, durable=True)
             channel.queue_bind(self.train_queue, self.train_exchange, self.train_routing_key)
             # endregion
             # region创建测试队列
-            channel.exchange_declare(self.test_exchange, "topic", passive=True, durable=True)
-            channel.queue_declare(self.test_queue, passive=True, durable=True)
+            channel.exchange_declare(self.test_exchange, "topic", durable=True)
+            channel.queue_declare(self.test_queue, durable=True)
             channel.queue_bind(self.test_queue, self.test_exchange, self.test_routing_key)
             # endregion
             # region创建训练素材解包队列
-            channel.exchange_declare(self.package_exchange, "topic", passive=True, durable=True)
-            channel.queue_declare(self.package_queue, passive=True, durable=True)
+            channel.exchange_declare(self.package_exchange, "topic", durable=True)
+            channel.queue_declare(self.package_queue, durable=True)
             channel.queue_bind(self.package_queue, self.package_exchange, self.package_routing_key)
             # endregion
         except Exception as e:
             # region创建训练队列
-            channel = connection.channel()
-            channel.exchange_declare(self.train_exchange, "topic", durable=True)
-            channel.queue_declare(self.train_queue)
-            channel.queue_bind(self.train_queue, self.train_exchange, self.train_routing_key)
-            # endregion
-            # region创建训练队列
-            channel = connection.channel()
-            channel.exchange_declare(self.test_exchange, "topic", durable=True)
-            channel.queue_declare(self.test_queue)
-            channel.queue_bind(self.test_queue, self.test_exchange, self.test_routing_key)
-            # endregion
-            # region创建训练素材解包队列
-            channel = connection.channel()
-            channel.exchange_declare(self.package_exchange, "topic", durable=True)
-            channel.queue_declare(self.package_queue)
-            channel.queue_bind(self.package_queue, self.package_exchange, self.package_routing_key)
+            log.logger.error("添加队列失败" + e)
             # endregion
         connection.close()
         # self.get_one(channel)
@@ -265,7 +251,7 @@ class pikaqiu(object):
 def do_basic_publish(exchange, routing_key, body):
     connection = pika.BlockingConnection(ff.parameters)
     channel = connection.channel()
-    channel.basic_publish(exchange, routing_key, body)
+    channel.basic_publish(exchange, routing_key, body, pika.BasicProperties(delivery_mode=2, ))  # 消息持久化
     connection.close()
 
 
@@ -305,8 +291,10 @@ def get_train_one():
     else:
         # 这里需要检查训练素材包是否已经解包，如果未解包，这里需要拒绝，让它重新排队ff.channel.basic_nack
         train_info = yaml.load(body.decode('utf-8'), Loader=yaml.FullLoader)
-        os.system("echo '%s' | sudo -S chmod -R 777 %s/%s/training_data" % (
-            ff.root_password, ff.assets_base_path, train_info["projectName"]))
+        # 暂时去掉这句！否则数据越多新增训练卡的很
+        # os.system("echo '%s' | sudo -S chmod -R 777 %s/%s/training_data" % (
+        #     ff.root_password, ff.assets_base_path, train_info["projectName"]))
+
         # 判断训练状态文件是否存在
         if not os.path.exists("%s/%s/training_data/train_status_%s.log" % (
                 ff.assets_base_path, train_info["projectName"], train_info["taskId"])):
@@ -436,8 +424,8 @@ def get_train_one():
                 channel.basic_ack(method_frame.delivery_tag)  # 告诉队列可以放行了
                 # region 更新数据库
                 ff.postgres_execute(sql)
-                os.system("echo %s | sudo -S chmod -R 777 %s/%s" % (
-                    ff.root_password, ff.assets_base_path, train_info["projectName"]))
+                # os.system("echo %s | sudo -S chmod -R 777 %s/%s" % (
+                #     ff.root_password, ff.assets_base_path, train_info["projectName"]))
                 notify_message = "训练完成"
             elif "停止训练" in status:
                 sql = "UPDATE train_record SET status=%d where task_id='%s'" % (3, train_info['taskId'])
@@ -468,10 +456,10 @@ def do_train_http():
             modeldcfgname = net_framework.yolov4Tiny3l["modeldcfgname"]
         pretraincfgname = "" if data["pretrainWeight"] == "" else data["pretrainWeight"].split("_")[0] + ".cfg"
 
-        os.system("echo %s | sudo -S mkdir -p %s/%s/training_data" % (
-            ff.root_password, ff.assets_base_path, data["projectName"]))
-        os.system("echo %s | sudo -S chmod -R 777 %s/%s/training_data" % (
-            ff.root_password, ff.assets_base_path, data["projectName"]))
+        # os.system("echo %s | sudo -S mkdir -p %s/%s/training_data" % (
+        #     ff.root_password, ff.assets_base_path, data["projectName"]))
+        # os.system("echo %s | sudo -S chmod -R 777 %s/%s/training_data" % (
+        #     ff.root_password, ff.assets_base_path, data["projectName"]))
         # region 写入配置文件
         with open('./config.yaml', 'r', encoding='utf-8') as f:
             result = yaml.load(f.read(), Loader=yaml.FullLoader)
@@ -829,7 +817,6 @@ def delete_model():
     os.system("echo %s | sudo -S rm %s" % (ff.root_password, p))
     basePath, name = os.path.split(p)
     fname, fename = os.path.splitext(name)  # 文件名和后缀
-    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
     os.system("echo %s | sudo -S rm %s/%s.*" % (ff.root_password, basePath, fname))
     return Response(json.dumps({"res": "ok", "message": "成功"}), mimetype='application/json')
 
@@ -844,8 +831,8 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
         taskName = rows[0][0]
 
     basePath = ff.assets_base_path + "/" + project_name
-    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
     search_path = basePath + "/backup"
+    os.system("echo %s | sudo -S chmod 777 %s/%s.*" % (ff.root_password, search_path, fname))
 
     # 首先查看是否存在已经发布的版本文件
     result = {}
@@ -856,10 +843,10 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
     # 开始写入发布的信息
     releaseDate = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     releaseDateFile = "%s/%s.releaseDate" % (model_base_path, fname)
-    if os.path.exists(releaseDateFile): # 先判断是不是已经存在发布日期的文件
+    if os.path.exists(releaseDateFile):  # 先判断是不是已经存在发布日期的文件
         with open(releaseDateFile, "r") as fs:
-            releaseDate = fs.readline().replace("\n", "") # 已经存在那么把发布日期改为真实的日期
-    else: # 不存在，那么新建发布日期
+            releaseDate = fs.readline().replace("\n", "")  # 已经存在那么把发布日期改为真实的日期
+    else:  # 不存在，那么新建发布日期
         os.system("echo %s | sudo -S echo '%s' > %s/%s.releaseDate" % (
             ff.root_password, releaseDate, model_base_path, fname))  #
 
@@ -875,7 +862,6 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
     os.system("echo %s | sudo -S mkdir -p '%s'" % (ff.root_password, modelReleasePath))  #
     os.system("echo %s | sudo -S chmod -R 777 '%s'" % (ff.root_password, modelReleasePath))  #
 
-
     # 复制模型文件到发布目录
     os.system("cp -rf '%s' '%s'" % (
         model_path, modelReleasePath + "/" + label_name + ".weights"))  #
@@ -887,9 +873,11 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
     print(str)
     os.system(str)  #
     # 复制配置文件到发布目录
-    os.system("cp -rf '%s' '%s'" % (model_path.replace(".weights", ".cfg"), modelReleasePath + "/" + label_name + ".cfg"))  #
+    os.system(
+        "cp -rf '%s' '%s'" % (model_path.replace(".weights", ".cfg"), modelReleasePath + "/" + label_name + ".cfg"))  #
     # 复制推荐置信度文件到发布目录
-    os.system("cp -rf '%s' '%s'" % (model_path.replace(".weights", ".suggest"), modelReleasePath + "/suggest_score.txt"))  #
+    os.system(
+        "cp -rf '%s' '%s'" % (model_path.replace(".weights", ".suggest"), modelReleasePath + "/suggest_score.txt"))  #
     # 写入labels.names到发布目录
     os.system("echo '%s' > '%s'" % (label_name, modelReleasePath + "/labels.names"))  #
     # 复制backup里的labels.names到发布目录
@@ -905,7 +893,7 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
                       (height, modelReleasePath + "/" + label_name + ".cfg"))  #
     except:
         log.logger.error("err change project size")
-    os.system("zip -jq %s %s/*" % (modelReleasePath + ".zip", modelReleasePath))  #
+    os.system("echo %s | sudo -S zip -jq %s %s/*" % (ff.root_password, modelReleasePath + ".zip", modelReleasePath))  #
 
 
 @app.route('/get_model_size', methods=['GET'])
@@ -958,8 +946,8 @@ def online_model():
 @app.route('/get_labels/<project_name>', methods=['GET'])
 def get_labels(project_name):
     basePath = ff.assets_base_path + "/" + project_name
-    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))  # 重命名模型文件
     label_file = basePath + "/backup/labels.names"
+    os.system("echo %s | sudo -S chmod 777 %s" % (ff.root_password, label_file))  # 重命名模型文件
     labels = []
     if os.path.exists(label_file):
         lines = open(label_file, 'r')
@@ -982,9 +970,9 @@ def get_labels(project_name):
 @app.route('/get_labels_with_info/<project_name>', methods=['GET'])
 def get_labels_with_publish_date(project_name):
     basePath = ff.assets_base_path + "/" + project_name
-    os.system("echo %s | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
     search_path = basePath + "/backup"
     label_file = search_path + "/labels.names"
+    os.system("echo %s | sudo -S chmod 777 %s" % (ff.root_password, label_file))
     suggest_file = "%s/modelRelease.yaml" % search_path
     labels = []
     result = None
@@ -1021,11 +1009,11 @@ def get_labels_with_publish_date(project_name):
 def get_project_label_models(project_name, label_name):
     models = []
     basePath = ff.assets_base_path + "/" + project_name
-    os.system("echo '%s' | sudo -S chmod -R 777 %s" % (ff.root_password, basePath))
     search_path = basePath + "/backup"
     # framework_type = "yolov3"
     # 先获取当前发布的模型
     model_file = "%s/modelRelease.yaml" % search_path
+    os.system("echo '%s' | sudo -S chmod 777 %s" % (ff.root_password, model_file))
     now_model = ""
     if os.path.exists(model_file):
         with open(model_file, 'r', encoding='utf-8') as f:
@@ -1035,7 +1023,8 @@ def get_project_label_models(project_name, label_name):
                 now_model_path = search_path + "/" + label_name + "/" + now_model
                 if os.path.exists(now_model_path):
                     suggest_file = search_path + "/" + label_name + "/" + str(result[label_name]['unique']) + ".suggest"
-                    release_date_file = search_path + "/" + label_name + "/" + str(result[label_name]['unique']) + ".releaseDate"
+                    release_date_file = search_path + "/" + label_name + "/" + str(
+                        result[label_name]['unique']) + ".releaseDate"
                     suggest_score = None
                     release_date = None
                     if os.path.exists(suggest_file):
@@ -1044,7 +1033,8 @@ def get_project_label_models(project_name, label_name):
                     if os.path.exists(release_date_file):
                         with open(release_date_file, "r") as fs:
                             release_date = fs.readline().replace("\n", "")
-                    models.append({"name": now_model, "suggest_score": suggest_score, "release_date": release_date, "path": now_model_path, "status": 2})
+                    models.append({"name": now_model, "suggest_score": suggest_score, "release_date": release_date,
+                                   "path": now_model_path, "status": 2})
             f.close()
     for item in sorted(glob.glob(search_path + "/%s/*.weights" % label_name), key=os.path.getctime,
                        reverse=True):  # key 根据时间排序 reverse true表示倒叙
@@ -1061,7 +1051,8 @@ def get_project_label_models(project_name, label_name):
             if os.path.exists(release_date_file):
                 with open(release_date_file, "r") as fs:
                     release_date = fs.readline().replace("\n", "")
-            models.append({"name": name, "suggest_score": suggest_score, "release_date": release_date, "path": item, "label_name": label_name, "status": status})
+            models.append({"name": name, "suggest_score": suggest_score, "release_date": release_date, "path": item,
+                           "label_name": label_name, "status": status})
     return Response(json.dumps({"res": "ok", "message": "获取成功", "models": models}), mimetype='application/json')
 
 
@@ -1103,6 +1094,8 @@ def get_models():
                 one_project["list"].append(fra)
             projects.append(one_project)
     return Response(json.dumps({"res": 0, "message": "获取成功", "project_list": projects}), mimetype='application/json')
+
+
 # endregion
 
 
