@@ -100,7 +100,8 @@ class pikaqiu(object):
         self.package_queue = package_queue
         self.package_routing_key = package_routing_key
         # endregion
-        self.parameters = pika.URLParameters("amqp://%s:%s@%s:%d" % (rabbitmq_username, rabbitmq_password, rabbitmq_host, rabbitmq_port))
+        self.parameters = pika.URLParameters(
+            "amqp://%s:%s@%s:%d" % (rabbitmq_username, rabbitmq_password, rabbitmq_host, rabbitmq_port))
         # region postgres
         self.postgres_conn = None
         # endregion
@@ -223,38 +224,23 @@ class pikaqiu(object):
         channel = connection.channel()
         try:
             # region创建训练队列
-            channel.exchange_declare(self.train_exchange, "topic", passive=True, durable=True)
-            channel.queue_declare(self.train_queue, passive=True, durable=True)
+            channel.exchange_declare(self.train_exchange, "topic", durable=True)
+            channel.queue_declare(self.train_queue, durable=True)
             channel.queue_bind(self.train_queue, self.train_exchange, self.train_routing_key)
             # endregion
             # region创建测试队列
-            channel.exchange_declare(self.test_exchange, "topic", passive=True, durable=True)
-            channel.queue_declare(self.test_queue, passive=True, durable=True)
+            channel.exchange_declare(self.test_exchange, "topic", durable=True)
+            channel.queue_declare(self.test_queue, durable=True)
             channel.queue_bind(self.test_queue, self.test_exchange, self.test_routing_key)
             # endregion
             # region创建训练素材解包队列
-            channel.exchange_declare(self.package_exchange, "topic", passive=True, durable=True)
-            channel.queue_declare(self.package_queue, passive=True, durable=True)
+            channel.exchange_declare(self.package_exchange, "topic", durable=True)
+            channel.queue_declare(self.package_queue, durable=True)
             channel.queue_bind(self.package_queue, self.package_exchange, self.package_routing_key)
             # endregion
         except Exception as e:
             # region创建训练队列
-            channel = connection.channel()
-            channel.exchange_declare(self.train_exchange, "topic", durable=True)
-            channel.queue_declare(self.train_queue)
-            channel.queue_bind(self.train_queue, self.train_exchange, self.train_routing_key)
-            # endregion
-            # region创建训练队列
-            channel = connection.channel()
-            channel.exchange_declare(self.test_exchange, "topic", durable=True)
-            channel.queue_declare(self.test_queue)
-            channel.queue_bind(self.test_queue, self.test_exchange, self.test_routing_key)
-            # endregion
-            # region创建训练素材解包队列
-            channel = connection.channel()
-            channel.exchange_declare(self.package_exchange, "topic", durable=True)
-            channel.queue_declare(self.package_queue)
-            channel.queue_bind(self.package_queue, self.package_exchange, self.package_routing_key)
+            log.logger.error("添加队列失败" + e)
             # endregion
         connection.close()
         # self.get_one(channel)
@@ -265,7 +251,7 @@ class pikaqiu(object):
 def do_basic_publish(exchange, routing_key, body):
     connection = pika.BlockingConnection(ff.parameters)
     channel = connection.channel()
-    channel.basic_publish(exchange, routing_key, body)
+    channel.basic_publish(exchange, routing_key, body, pika.BasicProperties(delivery_mode=2, ))  # 消息持久化
     connection.close()
 
 
@@ -856,10 +842,10 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
     # 开始写入发布的信息
     releaseDate = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     releaseDateFile = "%s/%s.releaseDate" % (model_base_path, fname)
-    if os.path.exists(releaseDateFile): # 先判断是不是已经存在发布日期的文件
+    if os.path.exists(releaseDateFile):  # 先判断是不是已经存在发布日期的文件
         with open(releaseDateFile, "r") as fs:
-            releaseDate = fs.readline().replace("\n", "") # 已经存在那么把发布日期改为真实的日期
-    else: # 不存在，那么新建发布日期
+            releaseDate = fs.readline().replace("\n", "")  # 已经存在那么把发布日期改为真实的日期
+    else:  # 不存在，那么新建发布日期
         os.system("echo %s | sudo -S echo '%s' > %s/%s.releaseDate" % (
             ff.root_password, releaseDate, model_base_path, fname))  #
 
@@ -875,7 +861,6 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
     os.system("echo %s | sudo -S mkdir -p '%s'" % (ff.root_password, modelReleasePath))  #
     os.system("echo %s | sudo -S chmod -R 777 '%s'" % (ff.root_password, modelReleasePath))  #
 
-
     # 复制模型文件到发布目录
     os.system("cp -rf '%s' '%s'" % (
         model_path, modelReleasePath + "/" + label_name + ".weights"))  #
@@ -887,9 +872,11 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
     print(str)
     os.system(str)  #
     # 复制配置文件到发布目录
-    os.system("cp -rf '%s' '%s'" % (model_path.replace(".weights", ".cfg"), modelReleasePath + "/" + label_name + ".cfg"))  #
+    os.system(
+        "cp -rf '%s' '%s'" % (model_path.replace(".weights", ".cfg"), modelReleasePath + "/" + label_name + ".cfg"))  #
     # 复制推荐置信度文件到发布目录
-    os.system("cp -rf '%s' '%s'" % (model_path.replace(".weights", ".suggest"), modelReleasePath + "/suggest_score.txt"))  #
+    os.system(
+        "cp -rf '%s' '%s'" % (model_path.replace(".weights", ".suggest"), modelReleasePath + "/suggest_score.txt"))  #
     # 写入labels.names到发布目录
     os.system("echo '%s' > '%s'" % (label_name, modelReleasePath + "/labels.names"))  #
     # 复制backup里的labels.names到发布目录
@@ -1035,7 +1022,8 @@ def get_project_label_models(project_name, label_name):
                 now_model_path = search_path + "/" + label_name + "/" + now_model
                 if os.path.exists(now_model_path):
                     suggest_file = search_path + "/" + label_name + "/" + str(result[label_name]['unique']) + ".suggest"
-                    release_date_file = search_path + "/" + label_name + "/" + str(result[label_name]['unique']) + ".releaseDate"
+                    release_date_file = search_path + "/" + label_name + "/" + str(
+                        result[label_name]['unique']) + ".releaseDate"
                     suggest_score = None
                     release_date = None
                     if os.path.exists(suggest_file):
@@ -1044,7 +1032,8 @@ def get_project_label_models(project_name, label_name):
                     if os.path.exists(release_date_file):
                         with open(release_date_file, "r") as fs:
                             release_date = fs.readline().replace("\n", "")
-                    models.append({"name": now_model, "suggest_score": suggest_score, "release_date": release_date, "path": now_model_path, "status": 2})
+                    models.append({"name": now_model, "suggest_score": suggest_score, "release_date": release_date,
+                                   "path": now_model_path, "status": 2})
             f.close()
     for item in sorted(glob.glob(search_path + "/%s/*.weights" % label_name), key=os.path.getctime,
                        reverse=True):  # key 根据时间排序 reverse true表示倒叙
@@ -1061,7 +1050,8 @@ def get_project_label_models(project_name, label_name):
             if os.path.exists(release_date_file):
                 with open(release_date_file, "r") as fs:
                     release_date = fs.readline().replace("\n", "")
-            models.append({"name": name, "suggest_score": suggest_score, "release_date": release_date, "path": item, "label_name": label_name, "status": status})
+            models.append({"name": name, "suggest_score": suggest_score, "release_date": release_date, "path": item,
+                           "label_name": label_name, "status": status})
     return Response(json.dumps({"res": "ok", "message": "获取成功", "models": models}), mimetype='application/json')
 
 
@@ -1103,6 +1093,8 @@ def get_models():
                 one_project["list"].append(fra)
             projects.append(one_project)
     return Response(json.dumps({"res": 0, "message": "获取成功", "project_list": projects}), mimetype='application/json')
+
+
 # endregion
 
 
