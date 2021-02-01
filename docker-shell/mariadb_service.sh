@@ -1,0 +1,2 @@
+#!/bin/bash
+sudo docker run -p 3306:3306 --name mariadb -v /opt/mariadb:/var/lib/mysql -v /etc/localtime:/etc/localtime -e MYSQL_ROOT_PASSWORD=baymin1024 -d mariadb --character-set-server=utf8 --collation-server=utf8_general_ci

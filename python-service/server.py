@@ -25,13 +25,13 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 # 网络框架枚举
 class net_framework:
-    yolov4Tiny3l = {"name": "yolov4-tiny-3l", "modeldcfgname": "yolov4-tiny-3l.cfg",
+    yolov4Tiny3l = {"name": "QTing-tiny-3l", "modeldcfgname": "QTing-tiny-3l.cfg",
                     "train_docker_volume": "/Afinaltrain/SourDatas", "modelSavePath": "backup",
                     "modelSuffix": ".weights", "configSuffix": ".cfg"}
 
 
 def get_net_framework(net_name):
-    if net_name == "yolov4-tiny-3l":
+    if "QTing-tiny-3l" in net_name:
         return net_framework.yolov4Tiny3l
     else:
         return None
@@ -331,7 +331,7 @@ def get_train_one():
                 # 增加镜像地址进数据库，并且镜像地址外部(队列里的数据)传入
                 image_url = None
                 docker_volume = None
-                if train_info['providerType'] == net_framework.yolov4Tiny3l["name"]:
+                if net_framework.yolov4Tiny3l["name"] in train_info['providerType']:
                     image_url = train_info['image']
                     docker_volume = net_framework.yolov4Tiny3l["train_docker_volume"]
                 os.system("echo %s | sudo -S docker pull %s" % (ff.root_password, image_url))
@@ -452,7 +452,7 @@ def do_train_http():
     if data is not None:
         # region 第一步先生成配置文件到本地项目目录 pretrainweightpath: 说明如果为""的话就使用官方的预训练模型
         modeldcfgname = None
-        if data['providerType'] == net_framework.yolov4Tiny3l["name"]:
+        if net_framework.yolov4Tiny3l["name"] in data['providerType']:
             modeldcfgname = net_framework.yolov4Tiny3l["modeldcfgname"]
         pretraincfgname = "" if data["pretrainWeight"] == "" else data["pretrainWeight"].split("_")[0] + ".cfg"
 
@@ -494,6 +494,7 @@ def do_train_http():
             result["split_ratio"] = data["split_ratio"]
             result["recalldatum"] = data["recalldatum"]
             result["otherlabeltraintype"] = data["otherlabeltraintype"]
+            result["mergeTrainSymbol"] = data["mergeTrainSymbol"]
             with open('{}/{}/training_data/config.yaml'.format(ff.assets_base_path, data["projectName"]), 'w',
                       encoding='utf-8') as fs:
                 yaml.dump(data=result, stream=fs, allow_unicode=True)
@@ -654,113 +655,6 @@ def get_record_by_project_id():
         return Response(json.dumps({"res": "err"}), mimetype='application/json')
     return Response(json.dumps({"res": "ok"}), mimetype='application/json')
 
-
-@app.route('/restart_train', methods=['POST'])
-def restart_train_http():
-    try:
-        data = request.json
-        if data is not None:
-            trainInfo = {"projectId": data["projectId"],
-                         "projectName": data["projectName"],
-                         "assetsDir": data["assetsDir"],
-                         "assetsType": data["assetsType"],
-                         "providerType": data["providerType"],
-                         "providerOptions": {"yolov3Image": data["image"]}
-                         }
-
-            # config.write(open("test.cfg", "w"))
-            docker_volume = "/darknet/assets"
-            docker_volume_model = "/darknet/assets/yiningzeng.weights"
-            if data['providerType'] == 'yolov3':
-                docker_volume = "/darknet/assets"
-                docker_volume_model = "/darknet/assets/yiningzeng.weights"
-                if "width" in data:
-                    os.system('sed -i "s/^width.*/width=%s/g" %s/yolov3-voc.cfg' % (
-                        data["width"], ff.assets_base_path + "/" + data["assetsDir"]))
-                if "height" in data:
-                    os.system('sed -i "s/^height.*/height=%s/g" %s/yolov3-voc.cfg' % (
-                        data["height"], ff.assets_base_path + "/" + data["assetsDir"]))
-                if "max_batches" in data:
-                    os.system('sed -i "s/^max_batches.*/max_batches=%d/g" %s/yolov3-voc.cfg' % (
-                        data["max_batches"], ff.assets_base_path + "/" + data["assetsDir"]))
-                    os.system('sed -i "s/^steps.*/steps=%d,%d/g" %s/yolov3-voc.cfg' % (
-                        int(int(data["max_batches"]) * 0.8), int(int(data["max_batches"]) * 0.9),
-                        ff.assets_base_path + "/" + data["assetsDir"]))
-            # region detectron
-            elif data['providerType'] == 'fasterRcnn' or data['providerType'] == 'maskRcnn':
-                trainInfo["providerOptions"] = {"fasterRcnnImage": data["image"]}
-                docker_volume = "/Detectron/detectron/datasets/data"
-                docker_volume_model = "/Detectron/models/R-50.pkl"
-
-                if "max_batches" in data:  # fasterRcnn 和 maskRcnn 暂时不先替换掉steps
-                    os.system('sed -i "s/    MAX_ITER.*/    MAX_ITER: %d/g" %s/train-config.yaml' % (
-                        data["max_batches"], ff.assets_base_path + "/" + data["assetsDir"]))
-                    # os.system('sed -i "s/^STEPS.*/steps=%d,%d/g" %s/yolov3-voc.cfg' % (
-                    #     int(int(data["max_batches"]) * 0.8), int(int(data["max_batches"]) * 0.9),
-                    #     ff.package_base_path + "/" + data["assetsDir"]))
-            # endregion
-            # region detectron2
-            elif data['providerType'] == 'fasterRcnn2' or data['providerType'] == 'maskRcnn2' or data[
-                'providerType'] == 'keypointRcnn2':
-                trainInfo["providerOptions"] = {"detectron2Image": data["image"]}
-                docker_volume = "/detectron2/datasets"
-                docker_volume_model = "/detectron2/models/R-50.pkl"
-
-                if "max_batches" in data:  # fasterRcnn 和 maskRcnn 暂时不先替换掉steps
-                    os.system('sed -i "s/  MAX_ITER.*/  MAX_ITER: %d/g" %s/train-config.yaml' % (
-                        data["max_batches"], ff.assets_base_path + "/" + data["assetsDir"]))
-                if "weights" in data:  # fasterRcnn 和 maskRcnn 暂时不先替换掉steps
-                    os.system('sed -i "s/  WEIGHTS.*/  WEIGHTS: %s/g" %s/train-config.yaml' % (
-                        data["weights"], ff.assets_base_path + "/" + data["assetsDir"]))
-            # endregion
-            elif data['providerType'] == 'other':
-                trainInfo["providerOptions"] = {"otherImage": data["image"]}
-                docker_volume = data['docker_volume']
-                docker_volume_model = data['docker_volume_model']
-
-            if "yolov3-voc_last.weights" not in data["assetsDir"]:
-                os.system("echo %s | sudo -s rm %s/backup/yolov3-voc_last.weights" % (
-                    ff.root_password, ff.assets_base_path + "/" + data["assetsDir"]))
-            # 删除数据转换的状态文件
-            os.system("echo %s | sudo -s rm %s/train_log/convert_data.log" % (
-                ff.root_password, ff.assets_base_path + "/" + data["assetsDir"]))
-
-            # 写入正在训练，否则队列会重新执行
-            os.system("echo '正在训练\c' > '%s/%s/train_status_%s.log'" %
-                      (ff.assets_base_path, data["assetsDir"], data["taskId"]))
-
-            # 加入到训练队列
-            do_basic_publish('ai.train.topic', "train.start.%s" % data['projectId'], json.dumps(trainInfo))
-
-            cmd = "echo %s | sudo -S docker run --shm-size 32G --memory-swap -1 --rm --gpus '\"device=0,1,2,3,4\"' \
-                        --name %s \
-                        -v /etc/localtime:/etc/localtime:ro \
-                        -v '%s':'%s' \
-                        -v '%s':'%s' \
-                        --add-host service-postgresql:10.10.0.4 \
-                        --add-host service-rabbitmq:10.10.0.3 \
-                        --add-host service-ftp:10.10.0.2 \
-                        --add-host service-web:10.10.0.5 \
-                        --rm -d %s" % (
-                ff.root_password,
-                data['projectId'].replace("_", ""),
-                ff.assets_base_path + "/" + data["assetsDir"], docker_volume,
-                data["weights"], docker_volume_model,
-                data["image"])
-            os.system("echo '%s\c' > '%s/%s/train.dname'" %
-                      (data['projectId'].replace("_", ""), ff.assets_base_path, data["assetsDir"]))
-
-            log.logger.info("\n\n**************************\n重新训练: %s\n**************************\n" % cmd)
-            os.system(cmd)
-            ff.postgres_execute("UPDATE train_record SET "
-                                "status=%d WHERE project_id='%s'" %
-                                (2, data['projectId']))
-    except Exception as e:
-        log.logger.error(e)
-        return Response(json.dumps({"res": "err"}), mimetype='application/json')
-    return Response(json.dumps({"res": "ok"}), mimetype='application/json')
-
-
 # region 新版本的新增接口
 # 获取所属项目列表
 @app.route('/get_local_projects', methods=['GET'])
@@ -805,7 +699,7 @@ def get_project_relase_models_history(project_name):
     search_path = ff.assets_base_path
     now_model = ""
     # 先获取当前发布的模型
-    for item in sorted(glob.glob(search_path + "/%s/model_release/yolov4-tiny-3l/*.weights" % project_name),
+    for item in sorted(glob.glob(search_path + "/%s/model_release/QTing-tiny-3l-single/*.weights" % project_name),
                        key=os.path.getctime, reverse=True):
         _, now_model = os.path.split(item)
     for item in sorted(glob.glob(search_path + "/%s/model_release_history/*.weights" % project_name),
@@ -822,7 +716,6 @@ def get_project_relase_models_history(project_name):
 @app.route('/del_model', methods=['DELETE'])
 def delete_model():
     p = unquote(request.args.get('p'))
-    os.system("echo %s | sudo -S rm %s" % (ff.root_password, p.replace("backup", "model_release_history")))  # 重命名模型文件
     os.system("echo %s | sudo -S rm %s" % (ff.root_password, p))
     basePath, name = os.path.split(p)
     fname, fename = os.path.splitext(name)  # 文件名和后缀
@@ -830,25 +723,25 @@ def delete_model():
     return Response(json.dumps({"res": "ok", "message": "成功"}), mimetype='application/json')
 
 
-def online_model_func(project_name, label_name, model_path, model_name, suggest_score, width=None, height=None):
+def online_model_func(project_name, label_name, model_path, model_name, suggest_score, is_multilabel=False, width=None, height=None):
+    basePath = ff.assets_base_path + "/" + project_name
     model_base_path, _ = os.path.split(model_path)
     fname, fename = os.path.splitext(model_name)  # 文件名和后缀
-
-    taskName = ""
-    suc, rows = ff.postgres_execute("select task_name from train_record where task_id ='%s'" % fname, True)
-    if suc and rows is not None and len(rows) > 0:
-        taskName = rows[0][0]
-
-    basePath = ff.assets_base_path + "/" + project_name
-    search_path = basePath + "/backup"
-    os.system("echo %s | sudo -S chmod 777 %s/%s.*" % (ff.root_password, search_path, fname))
-
     # 首先查看是否存在已经发布的版本文件
     result = {}
+    if is_multilabel:
+        search_path = basePath + "/backup/QTing-tiny-3l-multilabel"
+        fuPath = basePath + "/model_release/QTing-tiny-3l-multilabel"
+
+    else:
+        search_path = basePath + "/backup/QTing-tiny-3l-single"
+        fuPath = basePath + "/model_release/QTing-tiny-3l-single"
+
     if os.path.exists("%s/modelRelease.yaml" % search_path):
         with open("%s/modelRelease.yaml" % search_path, 'r', encoding='utf-8') as f:
             result = yaml.load(f.read(), Loader=yaml.FullLoader)
             f.close()
+
     # 开始写入发布的信息
     releaseDate = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     releaseDateFile = "%s/%s.releaseDate" % (model_base_path, fname)
@@ -859,17 +752,28 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
         os.system("echo %s | sudo -S echo '%s' > %s/%s.releaseDate" % (
             ff.root_password, releaseDate, model_base_path, fname))  #
 
-    result[label_name] = {"unique": fname, "releaseDate": releaseDate, "suggestScore": suggest_score}
+    modelReleasePath = fuPath + "/" + label_name
+
+    # 复制backup里的labels.names到发布目录
+    os.system("cp -rf '%s' '%s'" % (search_path + "/labels.names", fuPath + "/labels.names"))  #
+    os.system("echo %s | sudo -S chmod 777 %s/%s.*" % (ff.root_password, search_path, fname))
+    os.system("echo %s | sudo -S rm -r '%s'" % (ff.root_password, modelReleasePath))  # 删除发布的文件夹
+    os.system("echo %s | sudo -S rm '%s.zip'" % (ff.root_password, modelReleasePath))  # 删除发布的zip文件
+    os.system("echo %s | sudo -S mkdir -p '%s'" % (ff.root_password, modelReleasePath))  #
+    os.system("echo %s | sudo -S chmod -R 777 '%s'" % (ff.root_password, modelReleasePath))  #
+
+    if is_multilabel:
+        result["unique"] = fname
+    else:
+        result[label_name] = {"unique": fname, "releaseDate": releaseDate, "suggestScore": suggest_score}
     with open("%s/modelRelease.yaml" % search_path, 'w', encoding='utf-8') as fs:
         yaml.dump(data=result, stream=fs)
         fs.close()
-    fuPath = basePath + "/model_release/yolov4-tiny-3l"
-    modelReleasePath = fuPath + "/" + label_name
-    os.system("echo %s | sudo -S rm -r '%s'" % (ff.root_password, modelReleasePath))  # 删除发布的文件夹
-    os.system("echo %s | sudo -S rm '%s.zip'" % (ff.root_password, modelReleasePath))  # 删除发布的zip文件
 
-    os.system("echo %s | sudo -S mkdir -p '%s'" % (ff.root_password, modelReleasePath))  #
-    os.system("echo %s | sudo -S chmod -R 777 '%s'" % (ff.root_password, modelReleasePath))  #
+    taskName = ""
+    suc, rows = ff.postgres_execute("select task_name from train_record where task_id ='%s'" % fname, True)
+    if suc and rows is not None and len(rows) > 0:
+        taskName = rows[0][0]
 
     # 复制模型文件到发布目录
     os.system("cp -rf '%s' '%s'" % (
@@ -881,16 +785,16 @@ def online_model_func(project_name, label_name, model_path, model_name, suggest_
           "EOF" % (modelReleasePath, taskName, releaseDate)
     print(str)
     os.system(str)  #
+
+    # 复制配置文件到发布目录
+    os.system(
+        "cp -rf '%s' '%s'" % (model_path.replace(".weights", ".names"), modelReleasePath + "/labels.names"))  #
     # 复制配置文件到发布目录
     os.system(
         "cp -rf '%s' '%s'" % (model_path.replace(".weights", ".cfg"), modelReleasePath + "/" + label_name + ".cfg"))  #
     # 复制推荐置信度文件到发布目录
     os.system(
-        "cp -rf '%s' '%s'" % (model_path.replace(".weights", ".suggest"), modelReleasePath + "/suggest_score.txt"))  #
-    # 写入labels.names到发布目录
-    os.system("echo '%s' > '%s'" % (label_name, modelReleasePath + "/labels.names"))  #
-    # 复制backup里的labels.names到发布目录
-    os.system("cp -rf '%s' '%s'" % (search_path + "/labels.names", fuPath + "/labels.names"))  #
+        "cp -rf '%s' '%s'" % (model_path.replace(".weights", ".suggest"), modelReleasePath + "/suggest_score.suggest"))
 
     # 替换网络尺寸
     try:
@@ -914,7 +818,7 @@ def get_model_size():
     basePath = ff.assets_base_path + "/" + project_name
     fname, fename = os.path.splitext(model_name)  # 文件名和后缀
 
-    cfgFile = basePath + "/backup/" + label_name + "/" + fname + ".cfg"
+    cfgFile = basePath + "/backup/QTing-tiny-3l-single/" + label_name + "/" + fname + ".cfg"
 
     width = os.popen(
         "sed -rn '/^width.*=[0-9]{1,}/p' %s | sed 's/width//g' | sed 's/=//g' |sed 's/ //g' |sed -r 's/#.*//g'" %
@@ -938,15 +842,16 @@ def get_model_size():
 @app.route('/online_model', methods=['PUT'])
 def online_model():
     model_path = unquote(request.args.get('model_path'))
-    label_name = unquote(request.args.get('label_name'))
+    label_name = unquote(request.args.get('label_name', type=str, default="allLabels"))
     model_name = unquote(request.args.get('model_name'))
     project_name = unquote(request.args.get('project_name'))
-    suggest_score = unquote(request.args.get('suggest_score'))
+    suggest_score = unquote(request.args.get('suggest_score', type=str, default=""))
     ip = unquote(request.args.get('ip'))
     width = request.args.get('width', type=int, default=None)
     height = request.args.get('height', type=int, default=None)
+    is_multilabel = request.args.get('is_multilabel', type=int, default=1)
     # release = "-" + datetime.now().strftime('%Y%m%d') + "-release"
-    online_model_func(project_name, label_name, model_path, model_name, suggest_score, width, height)
+    online_model_func(project_name, label_name, model_path, model_name, suggest_score, is_multilabel == 1, width, height)
     os.system("echo %s | sudo -S echo '%s' > '%s'" % (ff.root_password, ip, "./ip"))  # 重命名模型文件
     return Response(json.dumps({"res": "ok", "message": "成功"}), mimetype='application/json')
 
@@ -955,7 +860,7 @@ def online_model():
 @app.route('/get_labels/<project_name>', methods=['GET'])
 def get_labels(project_name):
     basePath = ff.assets_base_path + "/" + project_name
-    label_file = basePath + "/backup/labels.names"
+    label_file = basePath + "/backup/labels.names" # 此处获取的还是总的
     os.system("echo %s | sudo -S chmod 777 %s" % (ff.root_password, label_file))  # 重命名模型文件
     labels = []
     if os.path.exists(label_file):
@@ -979,7 +884,7 @@ def get_labels(project_name):
 @app.route('/get_labels_with_info/<project_name>', methods=['GET'])
 def get_labels_with_publish_date(project_name):
     basePath = ff.assets_base_path + "/" + project_name
-    search_path = basePath + "/backup"
+    search_path = basePath + "/backup" # 获取项目数据标签在这里不合适，应该放到项目配置文件里
     label_file = search_path + "/labels.names"
     os.system("echo %s | sudo -S chmod 777 %s" % (ff.root_password, label_file))
     suggest_file = "%s/modelRelease.yaml" % search_path
@@ -1013,12 +918,66 @@ def get_labels_with_publish_date(project_name):
                     mimetype='application/json')
 
 
-# 训练中心通过项目名称和标签获取当下的模型列表
+# 训练中心通过项目名称获取该项目下的多类模型
+@app.route('/get_models_multilabel/<project_name>', methods=['GET'])
+def get_project_label_models_multilabel(project_name):
+    models = []
+    basePath = ff.assets_base_path + "/" + project_name
+    search_path = basePath + "/backup/QTing-tiny-3l-multilabel"
+    # framework_type = "yolov3"
+    # 先获取当前发布的模型
+    model_file = "%s/modelRelease.yaml" % search_path
+    os.system("echo '%s' | sudo -S chmod 777 %s" % (ff.root_password, model_file))
+    now_model = ""
+    if os.path.exists(model_file):
+        with open(model_file, 'r', encoding='utf-8') as f:
+            result = yaml.load(f.read(), Loader=yaml.FullLoader)
+            now_model = str(result['unique']) + ".weights"
+            now_model_path = search_path + "/" + "/" + now_model
+            if os.path.exists(now_model_path):
+                suggest_file = search_path + "/" +  str(result['unique']) + ".suggest"
+                release_date_file = search_path + "/" + str(
+                    result['unique']) + ".releaseDate"
+                release_date = None
+                if os.path.exists(release_date_file):
+                    with open(release_date_file, "r") as fs:
+                        release_date = fs.readline().replace("\n", "")
+                models.append({"name": now_model, "release_date": release_date,
+                               "path": now_model_path, "status": 2})
+            f.close()
+    for item in sorted(glob.glob(search_path + "/*.weights"), key=os.path.getctime,
+                       reverse=True):  # key 根据时间排序 reverse true表示倒叙
+        path, name = os.path.split(item)
+        status = 0
+        if now_model != name:
+            release_date_file = item.replace(os.path.splitext(item)[1], ".releaseDate")
+            release_date = None
+            if os.path.exists(release_date_file):
+                with open(release_date_file, "r") as fs:
+                    release_date = fs.readline().replace("\n", "")
+            models.append({"name": name, "release_date": release_date, "path": item, "status": status})
+    return Response(json.dumps({"res": "ok", "message": "获取成功", "models": models}), mimetype='application/json')
+
+
+@app.route('/get_multilabel_by_model', methods=['GET'])
+def get_multilabel_by_model():
+    model_path = unquote(request.args.get('model_path')).replace(".weights", ".suggest")
+    labels = []
+    if os.path.exists(model_path):
+        with open(model_path, 'r', encoding='utf-8') as f:
+            result = json.load(f)
+            for lb in result.keys():
+                labels.append({"label_name": lb, "suggest_score": result[lb]})
+        return Response(json.dumps({"res": "ok", "message": "获取成功", "laebles": labels}), mimetype='application/json')
+    else:
+        return Response(json.dumps({"res": "ok", "message": "推荐置信度文件不存在", "laebles": labels}), mimetype='application/json')
+
+
 @app.route('/get_models/<project_name>/<label_name>', methods=['GET'])
 def get_project_label_models(project_name, label_name):
     models = []
     basePath = ff.assets_base_path + "/" + project_name
-    search_path = basePath + "/backup"
+    search_path = basePath + "/backup/QTing-tiny-3l-single"
     # framework_type = "yolov3"
     # 先获取当前发布的模型
     model_file = "%s/modelRelease.yaml" % search_path
@@ -1038,7 +997,9 @@ def get_project_label_models(project_name, label_name):
                     release_date = None
                     if os.path.exists(suggest_file):
                         with open(suggest_file, "r") as fs:
-                            suggest_score = fs.readline().replace("\n", "")
+                            result = json.load(fs)
+                            if label_name in result.keys():
+                                suggest_score = result[label_name]
                     if os.path.exists(release_date_file):
                         with open(release_date_file, "r") as fs:
                             release_date = fs.readline().replace("\n", "")
@@ -1056,7 +1017,9 @@ def get_project_label_models(project_name, label_name):
             release_date = None
             if os.path.exists(suggest_file):
                 with open(suggest_file, "r") as fs:
-                    suggest_score = fs.readline().replace("\n", "")
+                    result = json.load(fs)
+                    if label_name in result.keys():
+                        suggest_score = result[label_name]
             if os.path.exists(release_date_file):
                 with open(release_date_file, "r") as fs:
                     release_date = fs.readline().replace("\n", "")

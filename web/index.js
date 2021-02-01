@@ -38,7 +38,7 @@ import 'moment/locale/zh-cn';
 import { getList, getModelList, getValPathList, getVocPathList, doTrain,
     startTest, stopTrain, continueTrainTrain, getLocalPathList, getModelListV2,
     getModelByProject, get_release_models_history, del_model, online_model, offline_model,
-    getLabelsByProject, getLabelsWithScoreByProject, suggest_score_get, suggest_score_put, get_model_size, del_record } from './services/api';
+    getLabelsByProject, getLabelsWithScoreByProject, suggest_score_get, suggest_score_put, get_model_size, del_record, get_models_multilabel, get_multilabel_by_model } from './services/api';
 const { Title, Paragraph, Text } = Typography;
 const { Option } = Select;
 const InputGroup = Input.Group;
@@ -63,7 +63,7 @@ class FreeFish extends React.Component {
             loading: false,
             tips: "载入可使用的权重文件... ",
             doTest: {
-                providerType: "yolov4-tiny-3l",
+                providerType: "QTing-tiny-3l-single",
                 assetsDir: "", // nowAssetsDir
                 weights: undefined,
                 valPath: undefined,
@@ -88,10 +88,10 @@ class FreeFish extends React.Component {
 
         api: {
             url: localStorage.getItem("api.url") === null?"localhost":localStorage.getItem("api.url"),
-            port: localStorage.getItem("api.port") === null?18888:localStorage.getItem("api.port"),
+            port: localStorage.getItem("api.port") === null?8080:localStorage.getItem("api.port"),
         },
         train : {
-            frontImage: "registry.cn-hangzhou.aliyuncs.com/qtingvision/auto-train:",
+            frontImage: "registry.cn-hangzhou.aliyuncs.com/qtingvision/auto-train-tiny:",
             baseImage: "latest",
             showAiPar: false,
             loading: false,
@@ -101,16 +101,16 @@ class FreeFish extends React.Component {
                 projectName: undefined, // 项目名称
                 assetsDir: undefined, // 素材文件夹，和packageDir相同
                 assetsType: "powerAi", // 素材的类型，pascalVoc和coco和other
-                providerType: "yolov4-tiny-3l", // 框架的类型yolov3 fasterRcnn maskRcnn
-                image: "registry.cn-hangzhou.aliyuncs.com/qtingvision/auto-train:latest", // 镜像路径
+                providerType: "QTing-tiny-3l-single", // 框架的类型yolov3
+                image: "registry.cn-hangzhou.aliyuncs.com/qtingvision/auto-train-tiny:latest", // 镜像路径
                 batchSize: 64,
-                imageWidth: 512,
-                imageHeight: 512,
-                maxIter: 120000, // 训练最大轮数
+                imageWidth: -1,
+                imageHeight: -1,
+                maxIter: -1, // 训练最大轮数
                 pretrainWeight: "", // 预训练权重文件
                 gpus: "0,1", // 使用的gpu id
                 trianType: 0,  // 0对应从头训练 1对应自训练 2 漏检训练
-                singleTrain: undefined, // 单类训练名称 ‘’则全类训练，不为空则训练输入的单类，确保单类名在标记标签中
+                singleTrain: [], // 单类训练名称 ‘’则全类训练，不为空则训练输入的单类，确保单类名在标记标签中
 
                 angle: 360,
                 cell_stride: 1, //平移步长
@@ -125,6 +125,7 @@ class FreeFish extends React.Component {
                 split_ratio: 0.95, // 训练样本占比
                 recalldatum: 2, // 检出率基准
                 otherlabeltraintype: 1, // 非当前标签图片训练方式
+                mergeTrainSymbol: 0, // 是否合并多标签训练
             },
         },
         suggestScore: {
@@ -143,16 +144,36 @@ class FreeFish extends React.Component {
             projectId: undefined, // 项目id
             assetsType: "powerAi", // 素材的类型，pascalVoc和coco和other
             projectName: undefined, // 项目名称
-            providerType: "yolov4-tiny-3l", // 框架的类型yolov3 fasterRcnn maskRcnn
+            providerType: "QTing-tiny-3l-single", // 框架的类型yolov3 fasterRcnn maskRcnn
             image: "registry.cn-hangzhou.aliyuncs.com/qtingvision/auto-train:latest", // 镜像路径
             assetsDir: "", //nowAssetsDir
             weights: undefined,
         },
-        modelManager: {
+        modelManagerSingle: {
             loadingProjects: false,
             expandedRowKeys: undefined,
             nowEditProjectName: undefined,
             loadingModels: true,
+            firstVisible: false,
+            secondVisible: false,
+            secondReleaseManagerVisible: false,
+            publishModal: {
+                visible: false,
+                modelWidth: undefined,
+                modelHeight: undefined,
+                model_name: undefined,
+                label_name: undefined,
+                model_path: undefined,
+                suggest_score: undefined,
+                defaultIp: undefined,
+                ips: [],
+            }
+        },
+        modelManagerMultilabel: {
+            loadingModels: true,
+            loadingLabels: false,
+            expandedRowKeys: undefined,
+            nowEditProjectName: undefined,
             firstVisible: false,
             secondVisible: false,
             secondReleaseManagerVisible: false,
@@ -270,7 +291,7 @@ class FreeFish extends React.Component {
 
     render() {
         const {
-            service: {trains: {list}, modelList, modelListV2, valPathList, vocPathList, localPathList, modelByProject, labelsByProject,labelsWithScoreByProject, get_release_models_history_res}
+            service: {trains: {list}, modelList, modelListV2, valPathList, vocPathList, localPathList, modelByProject, labelsByProject,labelsWithScoreByProject, release_models_history_res, models_multilabel, multilabel_by_model}
         } = this.props;
         const columns = [{
             title: '任务标识',
@@ -352,87 +373,6 @@ class FreeFish extends React.Component {
                                 },
                             });
                         }}>停止训练</Button>
-                        {/*<Button type="primary" size="small" style={{marginLeft: 10}} onClick={() => {*/}
-                        {/*    this.setState(*/}
-                        {/*        {*/}
-                        {/*            ...this.state,*/}
-                        {/*            test: {*/}
-                        {/*                ...this.state.test,*/}
-                        {/*                loading: true,*/}
-                        {/*                showTestModal: true,*/}
-                        {/*            }*/}
-                        {/*        },*/}
-                        {/*        () => {*/}
-                        {/*            const {dispatch} = this.props;*/}
-                        {/*            dispatch({*/}
-                        {/*                type: 'service/getModelList',*/}
-                        {/*                payload: {*/}
-                        {/*                    type: record.net_framework,*/}
-                        {/*                    path: encodeURI(record.assets_directory_name)*/}
-                        {/*                },*/}
-                        {/*                callback: (v) => {*/}
-                        
-                        {/*                    let fImage = "";*/}
-                        {/*                    let bImage = "latest";*/}
-                        {/*                    let port = 8100;*/}
-                        {/*                    let javaUrl = "";*/}
-                        {/*                    let javaPort = 888;*/}
-                        {/*                    if (record.net_framework === "yolov3") {*/}
-                        {/*                        port = 8100;*/}
-                        {/*                        fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/darknet-test:";*/}
-                        {/*                        javaUrl = "ai.8101.api.qtingvision.com";*/}
-                        {/*                    } else if (record.net_framework === "fasterRcnn" || record.net_framework === "maskRcnn") {*/}
-                        {/*                        Modal.warning({*/}
-                        {/*                            title: '此框架已经弃用',*/}
-                        {/*                            content: '已弃用，暂时不提供测试接口',*/}
-                        {/*                        });*/}
-                        {/*                        return;*/}
-                        {/*                    } else if (record.net_framework === "fasterRcnn2") {*/}
-                        {/*                        port = 8200;*/}
-                        {/*                        fImage = "registry.cn-hangzhou.aliyuncs.com/pytorch-powerai/detectron2-test:";*/}
-                        {/*                        javaUrl = "ai.8201.api.qtingvision.com";*/}
-                        {/*                    } else if (record.net_framework === "maskRcnn2") {*/}
-                        {/*                        port = 8200;*/}
-                        {/*                        fImage = "registry.cn-hangzhou.aliyuncs.com/pytorch-powerai/detectron2-test:";*/}
-                        {/*                        javaUrl = "ai.8201.api.qtingvision.com";*/}
-                        {/*                    } else if (record.net_framework === "other") {*/}
-                        {/*                        port = 8400;*/}
-                        {/*                        fImage = "registry.cn-hangzhou.aliyuncs.com/baymin/ai-power:";*/}
-                        {/*                        javaUrl = "ai.8401.api.qtingvision.com";*/}
-                        {/*                    }*/}
-                        
-                        {/*                    dispatch({*/}
-                        {/*                        type: 'service/getValPathList',*/}
-                        {/*                        callback: (aa) => {*/}
-                        
-                        {/*                        }*/}
-                        {/*                    });*/}
-                        
-                        {/*                    this.setState({*/}
-                        {/*                        ...this.state,*/}
-                        {/*                        test: {*/}
-                        {/*                            ...this.state.test,*/}
-                        {/*                            loading: false,*/}
-                        {/*                            frontImage: fImage,*/}
-                        {/*                            baseImage: bImage,*/}
-                        {/*                            showTestModal: true,*/}
-                        {/*                            showStandardValidationData: false,*/}
-                        {/*                            doTest: {*/}
-                        {/*                                ...this.state.test.doTest,*/}
-                        {/*                                port: port,*/}
-                        {/*                                javaUrl: javaUrl,*/}
-                        {/*                                javaPort: javaPort,*/}
-                        {/*                                providerType: record.net_framework,*/}
-                        {/*                                assetsDir: record.assets_directory_name, //nowAssetsDir*/}
-                        {/*                                image: `${fImage}${bImage}`,*/}
-                        {/*                                projectId: record.project_id,*/}
-                        {/*                            }*/}
-                        {/*                        }*/}
-                        {/*                    });*/}
-                        {/*                },*/}
-                        {/*            });*/}
-                        {/*        });*/}
-                        {/*}}>打开测试</Button>*/}
                         <Button type="primary" size="small" style={{marginLeft: 10}} onClick={() => {
                             this.setState({
                                 ...this.state,
@@ -469,15 +409,15 @@ class FreeFish extends React.Component {
                         {/*<Button type="primary" size="small" style={{marginLeft: 10}}>日志</Button>*/}
                     </Row>
                     <Row>
-                        <Spin spinning={this.state.loadingChart}>
-                        <Tabs defaultActiveKey="1" tabPosition="left" style={{ height: 720, marginTop: 20 }}>
-                            {this.state.project_labels.map(i => (
-                                <TabPane tab={`${i}`} key={i}>
+                        {
+                            record.net_framework === "QTing-tiny-3l-multilabel" &&
+                            <Tabs defaultActiveKey="1" tabPosition="left" style={{ height: 720, marginTop: 20 }}>
+                                <TabPane tab={`所有标签`}>
                                     <Col span={12} offset={4}>
                                         <Image
                                             width={"150%"}
                                             height={700}
-                                            src={record.draw_url.replace(/\/chart.png/, `-${i}/chart.png`) + "?id=" + moment().valueOf() + this.state.imageLossTimer}
+                                            src={record.draw_url + "?id=" + moment().valueOf() + this.state.imageLossTimer}
                                             preview={{
                                                 visible: this.state.lossImgPreviewVisible,
                                                 onVisibleChange: (visible, prevVisible) => {
@@ -491,16 +431,42 @@ class FreeFish extends React.Component {
                                         />
                                     </Col>
                                 </TabPane>
-                            ))}
-                        </Tabs>
-                        </Spin>
+                            </Tabs>
+                        }
+                        {
+                            record.net_framework !== "QTing-tiny-3l-multilabel" && <Spin spinning={this.state.loadingChart}>
+                                <Tabs defaultActiveKey="1" tabPosition="left" style={{ height: 720, marginTop: 20 }}>
+                                    {this.state.project_labels.map(i => (
+                                        <TabPane tab={`${i}`} key={i}>
+                                            <Col span={12} offset={4}>
+                                                <Image
+                                                    width={"150%"}
+                                                    height={700}
+                                                    src={record.draw_url.replace(/\/chart.png/, `-${i}/chart.png`) + "?id=" + moment().valueOf() + this.state.imageLossTimer}
+                                                    preview={{
+                                                        visible: this.state.lossImgPreviewVisible,
+                                                        onVisibleChange: (visible, prevVisible) => {
+                                                            this.setState({
+                                                                ...this.state,
+                                                                lossImgPreviewVisible: visible,
+                                                            })
+                                                        },
+                                                    }}
+                                                    // fallback=""
+                                                />
+                                            </Col>
+                                        </TabPane>
+                                    ))}
+                                </Tabs>
+                            </Spin>
+                        }
                     </Row>
                 </div>
         };
 
         const expandedModelsRowRender = (mainRecord, index, indent, expanded) => {
             return  <div>
-                <Spin tip="正在加载..." spinning={this.state.modelManager.loadingModels}>
+                <Spin tip="正在加载..." spinning={this.state.modelManagerSingle.loadingModels}>
                     {/*<Badge status="processing" text="Running" />*/}
                     <Table columns={[
                         {
@@ -539,16 +505,16 @@ class FreeFish extends React.Component {
                                                     payload: {
                                                         model_name: encodeURI(record.name),
                                                         label_name: encodeURI(record.label_name),
-                                                        project_name: this.state.modelManager.nowEditProjectName,
+                                                        project_name: this.state.modelManagerSingle.nowEditProjectName,
                                                     },
                                                     callback: (val) => {
                                                         if (val.res === "ok") {
                                                             this.setState({
                                                                 ...this.state,
-                                                                modelManager: {
-                                                                    ...this.state.modelManager,
+                                                                modelManagerSingle: {
+                                                                    ...this.state.modelManagerSingle,
                                                                     publishModal: {
-                                                                        ...this.state.modelManager.publishModal,
+                                                                        ...this.state.modelManagerSingle.publishModal,
                                                                         visible: true,
                                                                         modelWidth: val.width,
                                                                         modelHeight: val.height,
@@ -590,7 +556,7 @@ class FreeFish extends React.Component {
                                                         dispatch({
                                                             type: 'service/getModelByProject',
                                                             payload: {
-                                                                project_name: this.state.modelManager.nowEditProjectName,
+                                                                project_name: this.state.modelManagerSingle.nowEditProjectName,
                                                                 label_name: mainRecord.label_name,
                                                             },
                                                         });
@@ -613,6 +579,23 @@ class FreeFish extends React.Component {
 
                                 </span>),
                         }]} dataSource={modelByProject.models}/>
+                </Spin>
+            </div>;
+        };
+        const expandedLabelsRowRender = (mainRecord, index, indent, expanded) => {
+            return  <div>
+                <Spin tip="正在加载..." spinning={this.state.modelManagerMultilabel.loadingLabels}>
+                    {/*<Badge status="processing" text="Running" />*/}
+                    <Table columns={[
+                        {
+                            title: '标签名称',
+                            key: "label_name",
+                            dataIndex: 'label_name',
+                        },  {
+                            title: '推荐置信度',
+                            key: "suggest_score",
+                            dataIndex: 'suggest_score',
+                        }]} dataSource={multilabel_by_model.laebles}/>
                 </Spin>
             </div>;
         };
@@ -640,8 +623,8 @@ class FreeFish extends React.Component {
                     <Button key="1" type="primary" onClick={() => {
                         this.setState({
                             ...this.state,
-                            modelManager: {
-                                ...this.state.modelManager,
+                            modelManagerSingle: {
+                                ...this.state.modelManagerSingle,
                                 firstVisible: true
                             },
                         }, () => {
@@ -695,6 +678,8 @@ class FreeFish extends React.Component {
                                                         doTrain: {
                                                             ...this.state.train.doTrain,
                                                             singleTrain: bb.labels,
+                                                            mergeTrainSymbol: 0,
+                                                            providerType: "QTing-tiny-3l-single",
                                                         }
                                                     }
                                                 });
@@ -815,200 +800,6 @@ class FreeFish extends React.Component {
                                 });
                             }} defaultValue={this.state.apiPort} placeholder="port"/>
                         </InputGroup>
-                    </Modal>
-                    <Modal
-                        title="继续训练"
-                        okText="开始"
-                        cancelText="取消"
-                        destroyOnClose
-                        width={1000}
-                        visible={this.state.continueTrain.showModal}
-                        onOk={() => {
-                            const {dispatch} = this.props;
-                            this.setState({
-                                    ...this.state,
-                                    continueTrain: {
-                                        ...this.state.continueTrain,
-                                    }
-                                },
-                                () => {
-                                    dispatch({
-                                        type: 'service/continueTrainTrain',
-                                        payload: {
-                                            ...this.state.continueTrain
-                                        },
-                                        callback: (v) => {
-                                            if (v.res !== "ok") {
-                                                message.error(v.msg);
-                                            } else {
-                                                this.setState({
-                                                    ...this.state,
-                                                    continueTrain: {
-                                                        ...this.state.continueTrain,
-                                                        showModal: false,
-                                                        loading: false,
-                                                    }
-                                                });
-                                                dispatch({
-                                                    type: 'service/getList',
-                                                    payload: {
-                                                        page: this.state.pagination.current,
-                                                        num: this.state.pagination.defaultPageSize,
-                                                    },
-                                                    callback: (v) => {
-                                                        console.log(`加载：${JSON.stringify(v)}`);
-                                                        this.setState({
-                                                            ...this.state,
-                                                            refreshTime: moment().format("YYYY-MM-DD HH:mm:ss"),
-                                                            pagination: {
-                                                                ...this.state.pagination,
-                                                                total: v["total"],
-                                                                pageSize: v["num"],
-                                                            }
-                                                        });
-                                                    },
-                                                });
-                                            }
-                                        }
-                                    });
-                                });
-                        }}
-                        onCancel={() => {
-                            this.setState({
-                                ...this.state,
-                                continueTrain: {
-                                    ...this.state.continueTrain,
-                                    showModal: false,
-                                }
-                            });
-                        }}
-                        okButtonProps={{disabled: this.state.continueTrain.weights === undefined}}
-                        cancelButtonProps={{disabled: false}}
-                    >
-                        {
-                            this.state.continueTrain.providerType === "yolov3" &&
-                            <Spin spinning={this.state.continueTrain.loading} tip={"正在加载权重文件"} delay={500}>
-                                图像宽:
-                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
-                                             placeholder={modelList.width}
-                                             onChange={(value) => this.setState({
-                                                 ...this.state,
-                                                 continueTrain: {
-                                                     ...this.state.continueTrain,
-                                                     width: value,
-                                                 }
-                                             })}/>
-                                图像高:
-                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
-                                             placeholder={modelList.height}
-                                             onChange={(value) => this.setState({
-                                                 ...this.state,
-                                                 continueTrain: {
-                                                     ...this.state.continueTrain,
-                                                     height: value,
-                                                 }
-                                             })}/>
-                                训练最大轮数:
-                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
-                                             placeholder={modelList.max_batches}
-                                             onChange={(value) => this.setState({
-                                                 ...this.state,
-                                                 continueTrain: {
-                                                     ...this.state.continueTrain,
-                                                     max_batches: value,
-                                                 }
-                                             })}/>
-                                选择加载的权重文件(如果是梯度爆炸就选择前几个保留的文件):
-                                <Select
-                                    style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
-                                    onChange={(v) => {
-                                        this.setState({
-                                            ...this.state,
-                                            continueTrain: {
-                                                ...this.state.continueTrain,
-                                                weights: v
-                                            }
-                                        });
-                                    }}>
-                                    {modelList.weights_list.map(d => (
-                                        <Option key={d.path}>{d.filename}</Option>
-                                    ))}
-                                </Select>
-                                选择加载的数据集:<Select
-                                style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
-                                onChange={(v) => {
-                                    this.setState({
-                                        ...this.state,
-                                        test: {
-                                            ...this.state.test,
-                                            doTest: {
-                                                ...this.state.test.doTest,
-                                                valPath: v
-                                            }
-                                        }
-                                    });
-                                }}>
-                                {vocPathList.voc_path_list.map(d => (
-                                    <Option key={d.path}>{d.dir_name}</Option>
-                                ))}
-                            </Select>
-                                镜像地址:
-                                <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="镜像地址"
-                                       addonBefore={this.state.continueTrain.frontImage}
-                                       value={this.state.continueTrain.baseImage} allowClear
-                                       onChange={(e) => this.setState({
-                                           ...this.state,
-                                           continueTrain: {
-                                               ...this.state.continueTrain,
-                                               image: `${this.state.continueTrain.frontImage}${e.target.value}`
-                                           }
-                                       })}/>
-                            </Spin>
-                        }
-                        {
-                            (this.state.continueTrain.providerType === "fasterRcnn" || this.state.continueTrain.providerType === "maskRcnn" ||
-                                this.state.continueTrain.providerType === "fasterRcnn2" || this.state.continueTrain.providerType === "maskRcnn2") &&
-                            <Spin spinning={this.state.continueTrain.loading} tip={"正在加载权重文件"} delay={500}>
-                                训练最大轮数:
-                                <InputNumber style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
-                                             placeholder={modelList.max_batches}
-                                             onChange={(value) => this.setState({
-                                                 ...this.state,
-                                                 continueTrain: {
-                                                     ...this.state.continueTrain,
-                                                     max_batches: value,
-                                                 }
-                                             })}/>
-                                选择加载的权重文件(如果是梯度爆炸就劲量选择前几个保留的文件):
-                                <Select
-                                    style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
-                                    onChange={(v) => {
-                                        this.setState({
-                                            ...this.state,
-                                            continueTrain: {
-                                                ...this.state.continueTrain,
-                                                weights: v
-                                            }
-                                        });
-                                    }}>
-                                    {modelList.weights_list.map(d => (
-                                        <Option key={d.path}>{d.filename}</Option>
-                                    ))}
-                                </Select>
-                                镜像地址:
-                                <Input style={{marginTop: "10px", marginBottom: "20px"}} placeholder="镜像地址"
-                                       addonBefore={this.state.continueTrain.frontImage}
-                                       value={this.state.continueTrain.baseImage} allowClear
-                                       onChange={(e) => this.setState({
-                                           ...this.state,
-                                           continueTrain: {
-                                               ...this.state.continueTrain,
-                                               image: `${this.state.continueTrain.frontImage}${e.target.value}`
-                                           }
-                                       })}/>
-                            </Spin>
-                        }
-
                     </Modal>
                     <Modal
                         title="参数设置"
@@ -1157,37 +948,38 @@ class FreeFish extends React.Component {
                     <Modal
                         maskClosable={false}
                         destroyOnClose
-                        title="模型发布设置"
-                        visible={this.state.modelManager.publishModal.visible}
+                        title="模型发布设置-单类别模型"
+                        visible={this.state.modelManagerSingle.publishModal.visible}
                         onOk={() => {
                             const {dispatch} = this.props;
                             dispatch({
                                 type: 'service/onlineModel',
                                 payload: {
-                                    model_path: encodeURI(this.state.modelManager.publishModal.model_path),
-                                    model_name: encodeURI(this.state.modelManager.publishModal.model_name),
-                                    label_name: encodeURI(this.state.modelManager.publishModal.label_name),
-                                    project_name: this.state.modelManager.nowEditProjectName,
-                                    suggest_score: this.state.modelManager.publishModal.suggest_score,
-                                    width: this.state.modelManager.publishModal.modelWidth,
-                                    height: this.state.modelManager.publishModal.modelHeight,
-                                    ip: this.state.modelManager.publishModal.defaultIp,
+                                    model_path: encodeURI(this.state.modelManagerSingle.publishModal.model_path),
+                                    model_name: encodeURI(this.state.modelManagerSingle.publishModal.model_name),
+                                    label_name: encodeURI(this.state.modelManagerSingle.publishModal.label_name),
+                                    project_name: this.state.modelManagerSingle.nowEditProjectName,
+                                    suggest_score: this.state.modelManagerSingle.publishModal.suggest_score,
+                                    width: this.state.modelManagerSingle.publishModal.modelWidth,
+                                    height: this.state.modelManagerSingle.publishModal.modelHeight,
+                                    ip: this.state.modelManagerSingle.publishModal.defaultIp,
+                                    is_multilabel: 0,
                                 },
                                 callback: (aa) => {
                                     const {dispatch} = this.props;
                                     dispatch({
                                         type: 'service/getModelByProject',
                                         payload: {
-                                            project_name: this.state.modelManager.nowEditProjectName,
-                                            label_name: this.state.modelManager.publishModal.label_name,
+                                            project_name: this.state.modelManagerSingle.nowEditProjectName,
+                                            label_name: this.state.modelManagerSingle.publishModal.label_name,
                                         },
                                     });
                                     this.setState({
                                         ...this.state,
-                                        modelManager: {
-                                            ...this.state.modelManager,
+                                        modelManagerSingle: {
+                                            ...this.state.modelManagerSingle,
                                             publishModal: {
-                                                ...this.state.modelManager.publishModal,
+                                                ...this.state.modelManagerSingle.publishModal,
                                                 visible: false,
                                             }
                                         }
@@ -1202,10 +994,10 @@ class FreeFish extends React.Component {
                         onCancel={() => {
                             this.setState({
                                 ...this.state,
-                                modelManager: {
-                                    ...this.state.modelManager,
+                                modelManagerSingle: {
+                                    ...this.state.modelManagerSingle,
                                     publishModal: {
-                                        ...this.state.modelManager.publishModal,
+                                        ...this.state.modelManagerSingle.publishModal,
                                         visible: false,
                                     }
                                 }
@@ -1215,27 +1007,27 @@ class FreeFish extends React.Component {
                         cancelText="取消"
                     >
                         网络图像宽度:
-                        <InputNumber style={{marginTop: "5px", marginBottom: "10px", width: "100%"}} value={this.state.modelManager.publishModal.modelWidth} placeholder="留空表示新建项目时保留的值"
+                        <InputNumber style={{marginTop: "5px", marginBottom: "10px", width: "100%"}} value={this.state.modelManagerSingle.publishModal.modelWidth} placeholder="留空表示新建项目时保留的值"
                                      min={1}
                                      allowClear onChange={(value) => this.setState({
                             ...this.state,
-                            modelManager: {
-                                ...this.state.modelManager,
+                            modelManagerSingle: {
+                                ...this.state.modelManagerSingle,
                                 publishModal: {
-                                    ...this.state.modelManager.publishModal,
+                                    ...this.state.modelManagerSingle.publishModal,
                                     modelWidth: value
                                 }
                             }
                         })}/>
                         网络图像高度:
-                        <InputNumber style={{marginTop: "5px", marginBottom: "10px", width: "100%"}} value={this.state.modelManager.publishModal.modelHeight} placeholder="留空表示新建项目时保留的值"
+                        <InputNumber style={{marginTop: "5px", marginBottom: "10px", width: "100%"}} value={this.state.modelManagerSingle.publishModal.modelHeight} placeholder="留空表示新建项目时保留的值"
                                      min={1}
                                      allowClear onChange={(value) => this.setState({
                             ...this.state,
-                            modelManager: {
-                                ...this.state.modelManager,
+                            modelManagerSingle: {
+                                ...this.state.modelManagerSingle,
                                 publishModal: {
-                                    ...this.state.modelManager.publishModal,
+                                    ...this.state.modelManagerSingle.publishModal,
                                     modelHeight: value
                                 }
                             }
@@ -1243,20 +1035,129 @@ class FreeFish extends React.Component {
                         发布的内网IP:
                         <Select
                             style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
-                            defaultValue={this.state.modelManager.publishModal.defaultIp}
+                            defaultValue={this.state.modelManagerSingle.publishModal.defaultIp}
                             onChange={(v) => {
                                 this.setState({
                                     ...this.state,
-                                    modelManager: {
-                                        ...this.state.modelManager,
+                                    modelManagerSingle: {
+                                        ...this.state.modelManagerSingle,
                                         publishModal: {
-                                            ...this.state.modelManager.publishModal,
+                                            ...this.state.modelManagerSingle.publishModal,
                                             defaultIp: v
                                         }
                                     }
                                 });
                             }}>
-                            {this.state.modelManager.publishModal.ips.map(d => (
+                            {this.state.modelManagerSingle.publishModal.ips.map(d => (
+                                <Option key={d}>{d}</Option>
+                            ))}
+                        </Select>
+                    </Modal>
+                    <Modal
+                        maskClosable={false}
+                        destroyOnClose
+                        title="模型发布设置-多类别模型"
+                        visible={this.state.modelManagerMultilabel.publishModal.visible}
+                        onOk={() => {
+                            const {dispatch} = this.props;
+                            dispatch({
+                                type: 'service/onlineModel',
+                                payload: {
+                                    model_path: encodeURI(this.state.modelManagerMultilabel.publishModal.model_path),
+                                    model_name: encodeURI(this.state.modelManagerMultilabel.publishModal.model_name),
+                                    label_name: "allLabels",
+                                    project_name: this.state.modelManagerMultilabel.nowEditProjectName,
+                                    width: this.state.modelManagerMultilabel.publishModal.modelWidth,
+                                    height: this.state.modelManagerMultilabel.publishModal.modelHeight,
+                                    ip: this.state.modelManagerMultilabel.publishModal.defaultIp,
+                                    is_multilabel: 1,
+                                },
+                                callback: (aa) => {
+                                    const {dispatch} = this.props;
+                                    dispatch({
+                                        type: 'service/getModelsMultilabel',
+                                        payload: {
+                                            project_name: encodeURI(this.state.modelManagerMultilabel.nowEditProjectName),
+                                        },
+                                        callback: (v) => {
+                                            this.setState({
+                                                ...this.state,
+                                                modelManagerMultilabel: {
+                                                    ...this.state.modelManagerMultilabel,
+                                                    loadingModels: false,
+                                                    publishModal: {
+                                                        ...this.state.modelManagerMultilabel.publishModal,
+                                                        visible: false,
+                                                    }
+                                                },
+                                            });
+                                        }
+                                    });
+                                }
+                            });
+                            notification.success({
+                                message: "提醒",
+                                description: "已经发布成功，线上的AOI软件可以通过更新直接获取当前模型",
+                            });
+                        }}
+                        onCancel={() => {
+                            this.setState({
+                                ...this.state,
+                                modelManagerMultilabel: {
+                                    ...this.state.modelManagerMultilabel,
+                                    publishModal: {
+                                        ...this.state.modelManagerMultilabel.publishModal,
+                                        visible: false,
+                                    }
+                                }
+                            });
+                        }}
+                        okText="发布"
+                        cancelText="取消"
+                    >
+                        网络图像宽度:
+                        <InputNumber style={{marginTop: "5px", marginBottom: "10px", width: "100%"}} value={this.state.modelManagerMultilabel.publishModal.modelWidth} placeholder="留空表示新建项目时保留的值"
+                                     min={1}
+                                     allowClear onChange={(value) => this.setState({
+                            ...this.state,
+                            modelManagerMultilabel: {
+                                ...this.state.modelManagerMultilabel,
+                                publishModal: {
+                                    ...this.state.modelManagerMultilabel.publishModal,
+                                    modelWidth: value
+                                }
+                            }
+                        })}/>
+                        网络图像高度:
+                        <InputNumber style={{marginTop: "5px", marginBottom: "10px", width: "100%"}} value={this.state.modelManagerMultilabel.publishModal.modelHeight} placeholder="留空表示新建项目时保留的值"
+                                     min={1}
+                                     allowClear onChange={(value) => this.setState({
+                            ...this.state,
+                            modelManagerMultilabel: {
+                                ...this.state.modelManagerMultilabel,
+                                publishModal: {
+                                    ...this.state.modelManagerMultilabel.publishModal,
+                                    modelHeight: value
+                                }
+                            }
+                        })}/>
+                        发布的内网IP:
+                        <Select
+                            style={{width: '100%', marginTop: "10px", marginBottom: "10px"}}
+                            defaultValue={this.state.modelManagerMultilabel.publishModal.defaultIp}
+                            onChange={(v) => {
+                                this.setState({
+                                    ...this.state,
+                                    modelManagerMultilabel: {
+                                        ...this.state.modelManagerMultilabel,
+                                        publishModal: {
+                                            ...this.state.modelManagerMultilabel.publishModal,
+                                            defaultIp: v
+                                        }
+                                    }
+                                });
+                            }}>
+                            {this.state.modelManagerMultilabel.publishModal.ips.map(d => (
                                 <Option key={d}>{d}</Option>
                             ))}
                         </Select>
@@ -1379,8 +1280,26 @@ class FreeFish extends React.Component {
                             <Option value="coco">coco</Option>
                             <Option value="other">other</Option>
                         </Select>
+                        是否开启多标签单模型训练:&nbsp;&nbsp;
+                        <Switch checkedChildren="开启" unCheckedChildren="关闭"
+                                checked={this.state.train.doTrain.mergeTrainSymbol === 1}
+                                onChange={(c) => {
+                                    this.setState({
+                                        ...this.state,
+                                        train: {
+                                            ...this.state.train,
+                                            doTrain: {
+                                                ...this.state.train.doTrain,
+                                                mergeTrainSymbol: c ? 1 : 0,
+                                                singleTrain: c ? [] : this.state.train.doTrain.singleTrain,
+                                                providerType: c ? "QTing-tiny-3l-multilabel" : "QTing-tiny-3l-single",
+                                            }
+                                        }
+                                    })
+                                }}/><br/>
                         训练的缺陷标签(留空也表示全部标签训练):
-                        <Select  style={{marginTop: "5px", marginBottom: "10px", width: "100%"}}
+                        <Select  disabled={this.state.train.doTrain.mergeTrainSymbol === 1}
+                                 style={{marginTop: "5px", marginBottom: "10px", width: "100%"}}
                                  allowClear
                                  value={this.state.train.doTrain.singleTrain}
                                  mode="multiple" placeholder="留空也表示全部标签训练" onChange={(value) => this.setState({
@@ -1389,6 +1308,8 @@ class FreeFish extends React.Component {
                                 doTrain: {
                                     ...this.state.train.doTrain,
                                     singleTrain: value,
+                                    mergeTrainSymbol: 0,
+                                    providerType: "QTing-tiny-3l-single",
                                 }
                             }
                         })}>
@@ -1400,13 +1321,13 @@ class FreeFish extends React.Component {
                         </Select>
                         使用的框架:
                         <Select style={{marginTop: "5px", marginBottom: "10px", width: "100%"}}
-                                defaultValue="[darknet] yolov4-tiny-3l"
+                                value={this.state.train.doTrain.providerType}
                                 onChange={(value) => {
                                     console.log("providerType" + value);
                                     let fImage = "";
                                     let bImage = "latest";
-                                    if (value === "yolov4-tiny-3l.cfg") {
-                                        fImage = "registry.cn-hangzhou.aliyuncs.com/qtingvision/auto-train:";
+                                    if (value === "QTing-tiny-3l-single" || value === "QTing-tiny-3l-multilabel" ) {
+                                        fImage = "registry.cn-hangzhou.aliyuncs.com/qtingvision/auto-train-tiny:";
                                     }
                                     this.setState({
                                         ...this.state,
@@ -1422,7 +1343,8 @@ class FreeFish extends React.Component {
                                         }
                                     });
                                 }}>
-                            <Option value="yolov4-tiny-3l.cfg">[darknet] yolov4-tiny-3l</Option>
+                            <Option value="QTing-tiny-3l-single">QTing-tiny-3l-single</Option>
+                            <Option value="QTing-tiny-3l-multilabel">QTing-tiny-3l-multilabel</Option>
                         </Select>
                         镜像地址:
                         <InputGroup compact>
@@ -1544,43 +1466,40 @@ class FreeFish extends React.Component {
                                                      console.log(`ducker do train: callback ${this.state.train.doTrain.subdivisionssize}`);
                                                  })
                                              }}/>
-                                图像宽:
+                                图像宽高:
                                 <InputNumber style={{width: '100%'}}
-                                             placeholder={this.state.train.doTrain.imageWidth}
+                                             placeholder={"默认自适应图像宽高"}
                                              precision={0}
                                              step={1}
                                              min={0}
                                              onChange={(value) => {
-                                                 if (value === "" || value === null || value === undefined) value = 512;
-                                                 this.setState({
-                                                     ...this.state,
-                                                     train: {
-                                                         ...this.state.train,
-                                                         doTrain: {
-                                                             ...this.state.train.doTrain,
-                                                             imageWidth: value,
-                                                         },
-                                                     }
-                                                 })
-                                             }}/>
-                                图像高:
-                                <InputNumber style={{width: '100%'}}
-                                             placeholder={this.state.train.doTrain.imageHeight}
-                                             precision={0}
-                                             step={1}
-                                             min={0}
-                                             onChange={(value) => {
-                                                 if (value === "" || value === null || value === undefined) value = 512;
-                                                 this.setState({
-                                                     ...this.state,
-                                                     train: {
-                                                         ...this.state.train,
-                                                         doTrain: {
-                                                             ...this.state.train.doTrain,
-                                                             imageHeight: value,
-                                                         },
-                                                     }
-                                                 })
+                                                 if (value === "" || value === null || value === undefined || value === -1)
+                                                 {
+                                                     this.setState({
+                                                         ...this.state,
+                                                         train: {
+                                                             ...this.state.train,
+                                                             doTrain: {
+                                                                 ...this.state.train.doTrain,
+                                                                 imageWidth: -1,
+                                                                 imageHeight: -1,
+                                                             },
+                                                         }
+                                                     });
+                                                     return;
+                                                 } else {
+                                                     this.setState({
+                                                         ...this.state,
+                                                         train: {
+                                                             ...this.state.train,
+                                                             doTrain: {
+                                                                 ...this.state.train.doTrain,
+                                                                 imageWidth: value,
+                                                                 imageHeight: value,
+                                                             },
+                                                         }
+                                                     });
+                                                 }
                                              }}/>
                                 图像随机旋转角度范围:
                                 <InputNumber style={{width: '100%'}}
@@ -1622,12 +1541,12 @@ class FreeFish extends React.Component {
                                              }}/>
                                 训练最大轮数:
                                 <InputNumber style={{width: '100%'}}
-                                             placeholder={this.state.train.doTrain.maxIter}
+                                             placeholder={"默认自适应训练轮数"}
                                              precision={0}
                                              step={1}
                                              min={0}
                                              onChange={(value) => {
-                                                 if (value === "" || value === null || value === undefined) value = 120000;
+                                                 if (value === "" || value === null || value === undefined || value === -1) value = -1;
                                                  this.setState({
                                                      ...this.state,
                                                      train: {
@@ -2018,13 +1937,13 @@ class FreeFish extends React.Component {
                         onClose={() => {
                             this.setState({
                                 ...this.state,
-                                modelManager: {
-                                    ...this.state.modelManager,
+                                modelManagerSingle: {
+                                    ...this.state.modelManagerSingle,
                                     firstVisible: false
                                 },
                             });
                         }}
-                        visible={this.state.modelManager.firstVisible}
+                        visible={this.state.modelManagerSingle.firstVisible}
                     >
                         <Table columns={[
                             {
@@ -2041,16 +1960,16 @@ class FreeFish extends React.Component {
                                     <a onClick={() => {
                                         this.setState({
                                             ...this.state,
-                                            modelManager: {
-                                                ...this.state.modelManager,
+                                            modelManagerSingle: {
+                                                ...this.state.modelManagerSingle,
                                                 secondVisible: true,
                                                 nowEditProjectName: text,
                                             },
                                         }, () => {
                                             this.setState({
                                                ...this.state,
-                                               modelManager: {
-                                                   ...this.state.modelManager,
+                                               modelManagerSingle: {
+                                                   ...this.state.modelManagerSingle,
                                                    loadingProjects: true,
                                                },
                                             }, () => {
@@ -2063,8 +1982,8 @@ class FreeFish extends React.Component {
                                                     callback: (v) => {
                                                         this.setState({
                                                             ...this.state,
-                                                            modelManager: {
-                                                                ...this.state.modelManager,
+                                                            modelManagerSingle: {
+                                                                ...this.state.modelManagerSingle,
                                                                 loadingProjects: false,
                                                             },
                                                         });
@@ -2072,131 +1991,63 @@ class FreeFish extends React.Component {
                                                 });
                                             });
                                         });
-                                    }}>模型管理</a>
+                                    }}>单类别模型</a>
+                                        <Divider type="vertical"/>
+                                    <a  onClick={() => {
+                                        this.setState({
+                                            ...this.state,
+                                            modelManagerMultilabel: {
+                                                ...this.state.modelManagerMultilabel,
+                                                secondVisible: true,
+                                                nowEditProjectName: text,
+                                            },
+                                        }, () => {
+                                            this.setState({
+                                                ...this.state,
+                                                modelManagerMultilabel: {
+                                                    ...this.state.modelManagerMultilabel,
+                                                    loadingModels: true,
+                                                },
+                                            }, () => {
+                                                const {dispatch} = this.props;
+                                                dispatch({
+                                                    type: 'service/getModelsMultilabel',
+                                                    payload: {
+                                                        project_name: encodeURI(text)
+                                                    },
+                                                    callback: (v) => {
+                                                        this.setState({
+                                                            ...this.state,
+                                                            modelManagerMultilabel: {
+                                                                ...this.state.modelManagerMultilabel,
+                                                                loadingModels: false,
+                                                            },
+                                                        });
+                                                    }
+                                                });
+                                            });
+                                        });
+                                    }}>多类别模型</a>
                                     </span>
                                 ),
                             }]} dataSource={localPathList.path_list}/>
                         <Drawer
                             destroyOnClose={true}
-                            title={`${this.state.modelManager.nowEditProjectName}-模型列表`}
+                            title={`${this.state.modelManagerSingle.nowEditProjectName}-单类别模型列表`}
                             width="50%"
                             maskClosable={true}
                             onClose={() => {
                                 this.setState({
                                     ...this.state,
-                                    modelManager: {
-                                        ...this.state.modelManager,
+                                    modelManagerSingle: {
+                                        ...this.state.modelManagerSingle,
                                         secondVisible: false
                                     },
                                 });
                             }}
-                            visible={this.state.modelManager.secondVisible}
+                            visible={this.state.modelManagerSingle.secondVisible}
                         >
-                            {// region 暂时去掉手动计算推荐置信度
-                            }
-                            {/*<Collapse bordered={false} onChange={(v)=>{*/}
-                            {/*    if (v.length === 0)return;*/}
-                            {/*    const {dispatch} = this.props;*/}
-                            {/*    dispatch({*/}
-                            {/*        type: 'service/suggest_score_get',*/}
-                            {/*        payload: {*/}
-                            {/*            project_name: encodeURI(this.state.modelManager.nowEditProjectName),*/}
-                            {/*        },*/}
-                            {/*        callback: (res) => {*/}
-                            {/*            this.setState({*/}
-                            {/*                ...this.state,*/}
-                            {/*                suggestScore: {*/}
-                            {/*                    ...this.state.suggestScore,*/}
-                            {/*                    maxDetPerdm: res.maxDetPerdm,*/}
-                            {/*                    pixel2realLength: res.pixel2realLength,*/}
-                            {/*                }});*/}
-                            {/*        }*/}
-                            {/*    });*/}
-                            {/*}}>*/}
-                            {/*    <Collapse.Panel  header="点击重新计算推荐置信度" key="1">*/}
-                            {/*        <Form*/}
-                            {/*            layout="vertical"*/}
-                            {/*        >*/}
-                            {/*            <Form.Item label="单像素对应的物理尺寸(微米)">*/}
-                            {/*                <InputNumber*/}
-                            {/*                    value={this.state.suggestScore.pixel2realLength}*/}
-                            {/*                    onChange={(value) => {*/}
-                            {/*                    this.setState({*/}
-                            {/*                        ...this.state,*/}
-                            {/*                        suggestScore: {*/}
-                            {/*                            ...this.state.suggestScore,*/}
-                            {/*                            pixel2realLength: value,*/}
-                            {/*                        }});*/}
-                            {/*                }} step={0.1} style={{width: "100%"}} />*/}
-                            {/*            </Form.Item>*/}
-                            {/*            <Form.Item label="每平方分米所允许的最大误报数"> /!*就是单位平方分米所允许的最大误报数*!/*/}
-                            {/*                <InputNumber*/}
-                            {/*                    value={this.state.suggestScore.maxDetPerdm}*/}
-                            {/*                    onChange={(value) => {*/}
-                            {/*                    this.setState({*/}
-                            {/*                        ...this.state,*/}
-                            {/*                        suggestScore: {*/}
-                            {/*                            ...this.state.suggestScore,*/}
-                            {/*                            maxDetPerdm: value,*/}
-                            {/*                        }});*/}
-                            {/*                }} step={1} style={{width: "100%"}} />*/}
-                            {/*            </Form.Item>*/}
-                            {/*            <Form.Item>*/}
-                            {/*                <Button type="primary"*/}
-                            {/*                        loading={this.state.suggestScore.loading}*/}
-                            {/*                        onClick={()=>{*/}
-                            {/*                            if (this.state.suggestScore.pixel2realLength === null || this.state.suggestScore.maxDetPerdm === null) {*/}
-                            {/*                                message.error("值不可以为空！")*/}
-                            {/*                                return;*/}
-                            {/*                            }*/}
-                            {/*                            this.setState({*/}
-                            {/*                                ...this.state,*/}
-                            {/*                                suggestScore: {*/}
-                            {/*                                    ...this.state.suggestScore,*/}
-                            {/*                                    loading: true,*/}
-                            {/*                                }}, () => {*/}
-                            {/*                                // 开始计算啦*/}
-                            {/*                                const {dispatch} = this.props;*/}
-                            {/*                                dispatch({*/}
-                            {/*                                    type: 'service/suggest_score_put',*/}
-                            {/*                                    payload: {*/}
-                            {/*                                        project_name: encodeURI(this.state.modelManager.nowEditProjectName),*/}
-                            {/*                                        maxDetPerdm: this.state.suggestScore.maxDetPerdm,*/}
-                            {/*                                        pixel2realLength: this.state.suggestScore.pixel2realLength,*/}
-                            {/*                                    },*/}
-                            {/*                                    callback: (res) => {*/}
-                            {/*                                        if (res.res === "ok"){*/}
-                            {/*                                            notification.success({*/}
-                            {/*                                                duration: 0,*/}
-                            {/*                                                message: "执行完毕",*/}
-                            {/*                                                description: res.message,*/}
-                            {/*                                            });*/}
-                            {/*                                        } else {*/}
-                            {/*                                            notification.error({*/}
-                            {/*                                                duration: 0,*/}
-                            {/*                                                message: "执行出错",*/}
-                            {/*                                                description: res.message,*/}
-                            {/*                                            });*/}
-                            {/*                                        }*/}
-
-                            {/*                                        this.setState({*/}
-                            {/*                                            ...this.state,*/}
-                            {/*                                            suggestScore: {*/}
-                            {/*                                                ...this.state.suggestScore,*/}
-                            {/*                                                loading: false*/}
-                            {/*                                            }});*/}
-                            {/*                                    }*/}
-                            {/*                                });*/}
-                            {/*                            });*/}
-
-                            {/*                }}>开始计算</Button>*/}
-                            {/*            </Form.Item>*/}
-                            {/*        </Form>*/}
-                            {/*    </Collapse.Panel>*/}
-                            {/*</Collapse>*/}
-                            {// endregion
-                            }
-                            <Spin spinning={this.state.modelManager.loadingProjects}>
+                            <Spin spinning={this.state.modelManagerSingle.loadingProjects}>
                             <Table
                                 rowKey={"label_name"}
                                 columns={[{
@@ -2207,7 +2058,7 @@ class FreeFish extends React.Component {
                             dataSource={labelsWithScoreByProject.labels}
                                 pagination={false}
                                 expandable={{
-                                    expandedRowKeys: this.state.modelManager.expandedRowKeys,
+                                    expandedRowKeys: this.state.modelManagerSingle.expandedRowKeys,
                                     expandedRowRender: expandedModelsRowRender,
                                     expandRowByClick: true,
                                     onExpandedRowsChange: (expandedRows) => {
@@ -2216,8 +2067,8 @@ class FreeFish extends React.Component {
                                         if (!expanded) {
                                             this.setState({
                                                 ...this.state,
-                                                modelManager: {
-                                                    ...this.state.modelManager,
+                                                modelManagerSingle: {
+                                                    ...this.state.modelManagerSingle,
                                                     expandedRowKeys: [],
                                                 },
                                             });
@@ -2225,8 +2076,8 @@ class FreeFish extends React.Component {
                                         }
                                         this.setState({
                                             ...this.state,
-                                            modelManager: {
-                                                ...this.state.modelManager,
+                                            modelManagerSingle: {
+                                                ...this.state.modelManagerSingle,
                                                 loadingModels: true,
                                                 expandedRowKeys: [record.label_name],
                                             },
@@ -2235,14 +2086,14 @@ class FreeFish extends React.Component {
                                             dispatch({
                                                 type: 'service/getModelByProject',
                                                 payload: {
-                                                    project_name: this.state.modelManager.nowEditProjectName,
+                                                    project_name: this.state.modelManagerSingle.nowEditProjectName,
                                                     label_name: record.label_name,
                                                 },
                                                 callback: (v) => {
                                                     this.setState({
                                                         ...this.state,
-                                                        modelManager: {
-                                                            ...this.state.modelManager,
+                                                        modelManagerSingle: {
+                                                            ...this.state.modelManagerSingle,
                                                             loadingModels: false,
                                                         },
                                                     });
@@ -2252,6 +2103,184 @@ class FreeFish extends React.Component {
                                     }
                                 }}
                             />
+                            </Spin>
+                        </Drawer>
+
+
+                        <Drawer
+                            destroyOnClose={true}
+                            title={`${this.state.modelManagerMultilabel.nowEditProjectName}-多类别模型列表`}
+                            width="50%"
+                            maskClosable={true}
+                            onClose={() => {
+                                this.setState({
+                                    ...this.state,
+                                    modelManagerMultilabel: {
+                                        ...this.state.modelManagerMultilabel,
+                                        secondVisible: false
+                                    },
+                                });
+                            }}
+                            visible={this.state.modelManagerMultilabel.secondVisible}
+                        >
+                            <Spin tip="正在加载..." spinning={this.state.modelManagerMultilabel.loadingModels}>
+                                {/*<Badge status="processing" text="Running" />*/}
+                                <Table
+                                    rowKey={"name"}
+                                    columns={[
+                                    {
+                                        title: '模型名称',
+                                        key: "name",
+                                        dataIndex: 'name',
+                                    }, {
+                                        title: '发布状态',
+                                        key: "status",
+                                        dataIndex: 'status',
+                                        render: v => {
+                                            if (v === 1) return <Badge status="warning" text="已撤销"/>;
+                                            else if (v === 2) return <Badge status="processing" text="已发布"/>;
+                                        },
+                                    }, {
+                                        title: '发布日期',
+                                        render: (text, record) => {
+                                            if (record.status === 2) return <Tag icon={<CloudUploadOutlined/>} color="success">{record.release_date}</Tag>;
+                                            else return record.release_date;
+                                        }
+                                    }, {
+                                        title: '操作',
+                                        render: (text, record) => (
+                                            <span>
+                                    {
+                                        record.status === 0 &&  <Popconfirm
+                                            title="发布会把最新的模型替换为当前发布的模型，确定发布么？"
+                                            onConfirm={() => {
+                                                const {dispatch} = this.props;
+                                                dispatch({
+                                                    type: 'service/getModelSize',
+                                                    payload: {
+                                                        model_name: encodeURI(record.name),
+                                                        label_name: encodeURI(record.label_name),
+                                                        project_name: this.state.modelManagerMultilabel.nowEditProjectName,
+                                                    },
+                                                    callback: (val) => {
+                                                        if (val.res === "ok") {
+                                                            this.setState({
+                                                                ...this.state,
+                                                                modelManagerMultilabel: {
+                                                                    ...this.state.modelManagerMultilabel,
+                                                                    publishModal: {
+                                                                        ...this.state.modelManagerMultilabel.publishModal,
+                                                                        visible: true,
+                                                                        modelWidth: val.width,
+                                                                        modelHeight: val.height,
+                                                                        label_name: record.label_name,
+                                                                        model_name: record.name,
+                                                                        model_path: record.path,
+                                                                        suggest_score: record.suggest_score,
+                                                                        defaultIp: val.defaultIp,
+                                                                        ips: val.ips,
+                                                                    }
+                                                                }
+                                                            });
+                                                        }
+                                                    }
+                                                });
+
+                                            }}
+                                            okText="确定并打开设置"
+                                            cancelText="取消"
+                                        >
+                                            <a>发布</a>
+                                        </Popconfirm>
+                                    }
+                                                {
+                                                    record.status === 0 && <Divider type="vertical"/>
+                                                }
+                                                {
+                                                    record.status !== 2 && <Popconfirm
+                                                        title="确定要删除么？"
+                                                        onConfirm={() => {
+                                                            const {dispatch} = this.props;
+                                                            dispatch({
+                                                                type: 'service/delModel',
+                                                                payload: {
+                                                                    p: encodeURI(record.path)
+                                                                },
+                                                                callback: (aa) => {
+                                                                    const {dispatch} = this.props;
+                                                                    dispatch({
+                                                                        type: 'service/getModelByProject',
+                                                                        payload: {
+                                                                            project_name: this.state.modelManagerSingle.nowEditProjectName,
+                                                                            label_name: mainRecord.label_name,
+                                                                        },
+                                                                    });
+                                                                    notification.success({
+                                                                        message: "恭喜",
+                                                                        description: "删除成功",
+                                                                    });
+                                                                }
+                                                            });
+
+
+                                                        }}
+                                                        okText="确定"
+                                                        cancelText="取消"
+                                                    >
+                                                        <a>删除</a>
+                                                    </Popconfirm>
+                                                }
+
+
+                                </span>),
+                                    }]}
+                                       dataSource={models_multilabel.models}
+                                       pagination={false}
+                                       expandable={{
+                                           expandedRowKeys: this.state.modelManagerMultilabel.expandedRowKeys,
+                                           expandedRowRender: expandedLabelsRowRender,
+                                           expandRowByClick: true,
+                                           onExpandedRowsChange: (expandedRows) => {
+                                           },
+                                           onExpand: (expanded, record) => {
+                                               if (!expanded) {
+                                                   this.setState({
+                                                       ...this.state,
+                                                       modelManagerMultilabel: {
+                                                           ...this.state.modelManagerMultilabel,
+                                                           expandedRowKeys: [],
+                                                       },
+                                                   });
+                                                   return;
+                                               }
+                                               this.setState({
+                                                   ...this.state,
+                                                   modelManagerMultilabel: {
+                                                       ...this.state.modelManagerMultilabel,
+                                                       loadingLabels: true,
+                                                       expandedRowKeys: [record.name],
+                                                   },
+                                               }, () => {
+                                                   const {dispatch} = this.props;
+                                                   dispatch({
+                                                       type: 'service/getMultilabelByModel',
+                                                       payload: {
+                                                           model_path: record.path,
+                                                       },
+                                                       callback: (v) => {
+                                                           this.setState({
+                                                               ...this.state,
+                                                               modelManagerMultilabel: {
+                                                                   ...this.state.modelManagerMultilabel,
+                                                                   loadingLabels: false,
+                                                               },
+                                                           });
+                                                       }
+                                                   });
+                                               });
+                                           }
+                                       }}
+                                />
                             </Spin>
                         </Drawer>
                     </Drawer>
@@ -2344,6 +2373,18 @@ app.model({
             res: '',
             message: "",
         },
+        //region 多标签单模型
+        models_multilabel: {
+            res: '',
+            message: "",
+            models: [],
+        },
+        multilabel_by_model: {
+            res: '',
+            message: "",
+            laebles: [],
+        },
+        //endregion
     },
     effects: {
         *getList({ payload,callback}, { call, put }) {
@@ -2504,6 +2545,24 @@ app.model({
             if (callback)callback(response);
         },
 
+        //region 多标签单模型
+        *getModelsMultilabel({ payload,callback}, { call, put }) {
+            const response = yield call(get_models_multilabel,payload);
+            yield put({
+                type: 'models_multilabel',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
+        *getMultilabelByModel({ payload,callback}, { call, put }) {
+            const response = yield call(get_multilabel_by_model,payload);
+            yield put({
+                type: 'multilabel_by_model',
+                payload: response,
+            });
+            if (callback)callback(response);
+        },
+        //endregion
         // endregion
     },
     reducers: {
@@ -2604,12 +2663,21 @@ app.model({
                 online_model_res: action.payload,
             };
         },
-        offline_model_res(state, action) {
+
+        //region 多标签单模型
+        models_multilabel(state, action) {
             return {
                 ...state,
-                offline_model_res: action.payload,
+                models_multilabel: action.payload,
             };
         },
+        multilabel_by_model(state, action) {
+            return {
+                ...state,
+                multilabel_by_model: action.payload,
+            };
+        },
+        //endregion
         // endregion
     },
 });

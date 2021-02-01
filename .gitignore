@@ -32,3 +32,5 @@ python-service/ip
 *.txt
 
 python-service/log/
+
+web/docker/dist/

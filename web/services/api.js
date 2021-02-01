@@ -1,11 +1,11 @@
 import request from '../utils/request';
 import { stringify } from 'qs';
 
-// const ip="192.168.31.75:18888";//"10.50.102.166";
-const ip = `${localStorage.getItem("api.url") === null?"localhost":localStorage.getItem("api.url")}:${localStorage.getItem("api.port") === null?18888:localStorage.getItem("api.port")}`;
+// const ip="192.168.31.75:8080";//"10.50.102.166";
+const ip = `${localStorage.getItem("api.url") === null?"localhost":localStorage.getItem("api.url")}:${localStorage.getItem("api.port") === null?8080:localStorage.getItem("api.port")}`;
 export async function getList(params) {
     console.log("getList"+JSON.stringify(params));
-    return request(`http://${ip}/train_list?${stringify(params)}`, {
+    return request(`http://${ip}/v1/qt_train_record?${stringify(params)}`, {
         method: 'GET',
     });
 }
@@ -130,7 +130,19 @@ export async function offline_model(params) {
         method: 'PUT',
     });
 }
-//http://localhost:18888/get_model_list_v2/yolov4-tiny-3l/后道
+
+// region 多标签，单模型接口
+export async function get_models_multilabel(params) {
+    return request(`http://${ip}/get_models_multilabel/${params.project_name}`, {
+        method: 'GET',
+    });
+}
+export async function get_multilabel_by_model(params) {
+    return request(`http://${ip}/get_multilabel_by_model?${stringify(params)}`, {
+        method: 'GET',
+    });
+}
+//http://localhost:8080/get_model_list_v2/yolov4-tiny-3l/后道
 
 // endregion
 
